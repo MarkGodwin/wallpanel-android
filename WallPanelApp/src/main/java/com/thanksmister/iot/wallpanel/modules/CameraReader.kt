@@ -30,6 +30,7 @@ import androidx.lifecycle.MutableLiveData
 import com.google.android.gms.vision.*
 import com.google.android.gms.vision.CameraSource.CAMERA_FACING_BACK
 import com.google.android.gms.vision.CameraSource.CAMERA_FACING_FRONT
+import com.google.android.gms.vision.Frame.ROTATION_180
 import com.google.android.gms.vision.barcode.Barcode
 import com.google.android.gms.vision.barcode.BarcodeDetector
 import com.google.android.gms.vision.face.Face
@@ -452,7 +453,7 @@ constructor(private val context: Context) {
             var parameters = cameraDevice.parameters
             parameters.setPreviewSize(640, 480)
             parameters.pictureFormat = ImageFormat.NV21
-            parameters.setPreviewFpsRange(5, 5)
+            //parameters.previewFrameRate = 5
             cameraDevice.setDisplayOrientation(configuration.cameraRotate.toInt())
             cameraDevice.parameters = parameters
 
@@ -484,7 +485,7 @@ constructor(private val context: Context) {
 
                                 val ts = SystemClock.elapsedRealtime() - startTimestamp
                                 val byteBuffer = ByteBuffer.wrap(p0)
-                                val frame = Frame.Builder().setImageData(byteBuffer, 640, 480, ImageFormat.NV21).setId(frameId).setTimestampMillis(ts).setRotation(2).build()
+                                val frame = Frame.Builder().setImageData(byteBuffer, 640, 480, ImageFormat.NV21).setId(frameId).setTimestampMillis(ts).setRotation(ROTATION_180).build()
                                 frameId++
 
                                 detector.receiveFrame(frame)
