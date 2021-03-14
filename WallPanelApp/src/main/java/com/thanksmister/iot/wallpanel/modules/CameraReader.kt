@@ -148,9 +148,7 @@ constructor(private val context: Context) {
             if(multiDetector != null) {
 
                 if(configuration.cameraFPS <= 5)  {
-
                     slowCameraSource = SlowCameraSource(context, multiDetector!!, configuration)
-
                 }
                 else
                 {
@@ -187,19 +185,16 @@ constructor(private val context: Context) {
             this.cameraPreview = preview
             buildDetectors(configuration)
             if(multiDetector != null) {
-
-
-
                 cameraSource = initCamera(configuration.cameraId, configuration.cameraFPS)
                 cameraPreview!!.start(cameraSource, object : CameraSourcePreview.OnCameraPreviewListener {
                     override fun onCameraError() {
                         Timber.e("Camera Preview Error")
-                        cameraSource = if (configuration.cameraId == CAMERA_FACING_FRONT) {
+                        cameraSource = if(configuration.cameraId == CAMERA_FACING_FRONT) {
                             initCamera(CAMERA_FACING_BACK, configuration.cameraFPS)
                         } else {
                             initCamera(CAMERA_FACING_FRONT, configuration.cameraFPS)
                         }
-                        if (cameraPreview != null) {
+                        if(cameraPreview != null) {
                             try {
                                 cameraPreview!!.start(cameraSource, object : CameraSourcePreview.OnCameraPreviewListener {
                                     override fun onCameraError() {
@@ -233,12 +228,12 @@ constructor(private val context: Context) {
                 cameraPreview!!.start(cameraSource, object : CameraSourcePreview.OnCameraPreviewListener {
                     override fun onCameraError() {
                         Timber.e("Camera Preview Error")
-                        cameraSource = if (configuration.cameraId == CAMERA_FACING_FRONT) {
+                        cameraSource = if(configuration.cameraId == CAMERA_FACING_FRONT) {
                             initCamera(CAMERA_FACING_BACK, configuration.cameraFPS)
                         } else {
                             initCamera(CAMERA_FACING_FRONT, configuration.cameraFPS)
                         }
-                        if (cameraPreview != null) {
+                        if(cameraPreview != null) {
                             try {
                                 cameraPreview!!.start(cameraSource, object : CameraSourcePreview.OnCameraPreviewListener {
                                     override fun onCameraError() {
@@ -435,6 +430,7 @@ constructor(private val context: Context) {
         fun onComplete(byteArray: ByteArray?)
     }
 
+    // For a very low FPS option, run single shot captures on a timer
     class SlowCameraSource(context: Context, private val detector: MultiDetector, private val configuration: Configuration) {
 
         private var cameraDevice: Camera
@@ -472,16 +468,16 @@ constructor(private val context: Context) {
                 if(stop)
                     return
 
-                // For a very low FPS option, run single shot capture
                 shotTimer.schedule(object : TimerTask() {
                     override fun run() {
                         cameraDevice.setOneShotPreviewCallback(object : Camera.PreviewCallback {
-
                             override fun onPreviewFrame(p0: ByteArray?, p1: Camera?) {
-                                if(stop)
-                                    return
+                                synchronized(lock) {
+                                    if (stop)
+                                        return
 
-                                cameraDevice.stopPreview()
+                                    cameraDevice.stopPreview()
+                                }
 
                                 val ts = SystemClock.elapsedRealtime() - startTimestamp
                                 val byteBuffer = ByteBuffer.wrap(p0)
@@ -493,12 +489,10 @@ constructor(private val context: Context) {
                                 // Schedule another snapshot..
                                 scheduleSnapshot()
                             }
-
                         })
 
                         cameraDevice.startPreview()
                     }
-
                 }, frameDelay)
             }
         }
@@ -507,7 +501,6 @@ constructor(private val context: Context) {
             synchronized(lock) {
                 shotTimer.cancel()
                 stop = true
-
             }
             cameraDevice.setOneShotPreviewCallback(null)
             cameraDevice.stopPreview()
