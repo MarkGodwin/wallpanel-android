@@ -46,6 +46,7 @@ class MqttUtils {
         const val COMMAND_BRIGHTNESS = "brightness"
         const val COMMAND_NOTIFICATION = "notification"
         const val COMMAND_RELOAD = "reload"
+        const val COMMAND_FORCE_WEBVIEW_CRASH = "crashWebView"
         const val COMMAND_CLEAR_CACHE = "clearCache"
         const val COMMAND_EVAL = "eval"
         const val COMMAND_AUDIO = "audio"

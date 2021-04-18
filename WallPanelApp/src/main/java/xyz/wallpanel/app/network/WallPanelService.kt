@@ -617,6 +617,11 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
                     reloadPage()
                 }
             }
+            if (commandJson.has(COMMAND_FORCE_WEBVIEW_CRASH)) {
+                if (commandJson.getBoolean(COMMAND_FORCE_WEBVIEW_CRASH)) {
+                    forceWebViewCrash()
+                }
+            }
             if (commandJson.has(COMMAND_CLEAR_CACHE)) {
                 if (commandJson.getBoolean(COMMAND_CLEAR_CACHE)) {
                     clearBrowserCache()
@@ -741,6 +746,12 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
 
     private fun reloadPage() {
         val intent = Intent(BROADCAST_ACTION_RELOAD_PAGE)
+        val bm = LocalBroadcastManager.getInstance(applicationContext)
+        bm.sendBroadcast(intent)
+    }
+
+    private fun forceWebViewCrash() {
+        val intent = Intent(BROADCAST_ACTION_FORCE_WEBVIEW_CRASH)
         val bm = LocalBroadcastManager.getInstance(applicationContext)
         bm.sendBroadcast(intent)
     }

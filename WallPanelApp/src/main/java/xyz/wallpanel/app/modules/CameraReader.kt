@@ -19,7 +19,9 @@ package xyz.wallpanel.app.modules
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.ImageFormat
 import android.graphics.Matrix
+import android.graphics.SurfaceTexture
 import android.hardware.Camera
 import android.os.AsyncTask
 import android.os.Handler
@@ -32,6 +34,7 @@ import androidx.lifecycle.MutableLiveData
 import com.google.android.gms.vision.*
 import com.google.android.gms.vision.CameraSource.CAMERA_FACING_BACK
 import com.google.android.gms.vision.CameraSource.CAMERA_FACING_FRONT
+import com.google.android.gms.vision.Frame.ROTATION_180
 import com.google.android.gms.vision.barcode.Barcode
 import com.google.android.gms.vision.barcode.BarcodeDetector
 import com.google.android.gms.vision.face.Face
@@ -43,6 +46,8 @@ import timber.log.Timber
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.lang.ref.WeakReference
+import java.nio.ByteBuffer
+import java.util.*
 import javax.inject.Inject
 
 
@@ -56,6 +61,7 @@ constructor(private val context: Context) {
     private var multiDetector: MultiDetector? = null
     private var streamDetector: StreamingDetector? = null
     private var cameraSource: CameraSource? = null
+    private var slowCameraSource: SlowCameraSource? = null
     private var faceDetectorProcessor: LargestFaceFocusingProcessor? = null
     private var barCodeDetectorProcessor: MultiProcessor<Barcode>? = null
     private var motionDetectorProcessor: MultiProcessor<Motion>? = null
@@ -89,6 +95,9 @@ constructor(private val context: Context) {
 
         cameraSource?.release()
         cameraSource = null
+
+        slowCameraSource?.stop()
+        slowCameraSource = null;
 
         faceDetector?.release()
         faceDetector = null
@@ -125,25 +134,28 @@ constructor(private val context: Context) {
         if (configuration.cameraEnabled) {
             buildDetectors(configuration)
             multiDetector?.let {
-                try {
-                    cameraSource = initCamera(configuration.cameraId, configuration.cameraFPS)
-                    cameraSource?.start()
-                } catch (e: Exception) {
-                    Timber.e(e.message)
+
+                var cameraId = configuration.cameraId
+                for(a in 0..1) {
+
                     try {
-                        if (configuration.cameraId == CAMERA_FACING_FRONT) {
-                            cameraSource = initCamera(CAMERA_FACING_BACK, configuration.cameraFPS)
-                            cameraSource?.start()
-                        } else {
-                            cameraSource = initCamera(CAMERA_FACING_FRONT, configuration.cameraFPS)
+                        if(configuration.cameraFPS <= 5) {
+                            slowCameraSource = SlowCameraSource(context, multiDetector!!, configuration)
+                        }
+                        else {
+                            cameraSource = initCamera(configuration.cameraId, configuration.cameraFPS)
                             cameraSource?.start()
                         }
+                        return
+
                     } catch (e: Exception) {
                         Timber.e(e.message)
-                        cameraSource?.stop()
-                        cameraCallback?.onCameraError()
                     }
+                    cameraId = if (cameraId == CAMERA_FACING_BACK) CAMERA_FACING_FRONT else CAMERA_FACING_BACK
                 }
+
+                cameraSource?.stop()
+                cameraCallback?.onCameraError()
             }
         }
     }
@@ -406,6 +418,83 @@ constructor(private val context: Context) {
 
     interface OnCompleteListener {
         fun onComplete(byteArray: ByteArray?)
+    }
+
+    // For a very low FPS option, run single shot captures on a timer
+    class SlowCameraSource(context: Context, private val detector: MultiDetector, private val configuration: Configuration) {
+
+        private var cameraDevice: Camera
+        private var cameraTexture: SurfaceTexture
+
+        private var shotTimer: Timer
+
+        private var frameId = 0
+        private var startTimestamp = SystemClock.elapsedRealtime()
+        private var lock = java.lang.Object()
+        private var stop = false
+        private var frameDelay : Long
+
+        init {
+            cameraDevice = Camera.open(configuration.cameraId)
+            var parameters = cameraDevice.parameters
+            parameters.setPreviewSize(640, 480)
+            parameters.pictureFormat = ImageFormat.NV21
+            cameraDevice.parameters = parameters
+
+            cameraTexture = SurfaceTexture(100)
+            cameraDevice.setPreviewTexture(cameraTexture)
+
+            frameDelay = (1000 / configuration.cameraFPS).toLong()
+
+            shotTimer = Timer()
+
+            scheduleSnapshot()
+        }
+
+        private fun scheduleSnapshot() {
+            synchronized(lock) {
+                if(stop)
+                    return
+
+                shotTimer.schedule(object : TimerTask() {
+                    override fun run() {
+                        cameraDevice.setOneShotPreviewCallback(object : Camera.PreviewCallback {
+                            override fun onPreviewFrame(p0: ByteArray?, p1: Camera?) {
+                                synchronized(lock) {
+                                    if (stop)
+                                        return
+
+                                    cameraDevice.stopPreview()
+                                }
+
+                                val ts = SystemClock.elapsedRealtime() - startTimestamp
+                                val byteBuffer = ByteBuffer.wrap(p0)
+                                val frame = Frame.Builder().setImageData(byteBuffer, 640, 480, ImageFormat.NV21).setId(frameId).setTimestampMillis(ts).setRotation(ROTATION_180).build()
+                                frameId++
+
+                                detector.receiveFrame(frame)
+
+                                // Schedule another snapshot..
+                                scheduleSnapshot()
+                            }
+                        })
+
+                        cameraDevice.startPreview()
+                    }
+                }, frameDelay)
+            }
+        }
+
+        public fun stop() {
+            synchronized(lock) {
+                shotTimer.cancel()
+                stop = true
+            }
+            cameraDevice.setOneShotPreviewCallback(null)
+            cameraDevice.stopPreview()
+            cameraDevice.release()
+        }
+
     }
 
     class ByteArrayTask(context: Context, private val renderScript: RenderScript?, private val onCompleteListener: OnCompleteListener) : AsyncTask<Any, Void, ByteArray>() {

@@ -96,6 +96,10 @@ abstract class BaseBrowserActivity : DaggerAppCompatActivity() {
                 Timber.d("Browser page reloading.")
                 stopDisconnectTimer()
                 reload()
+            } else if (BROADCAST_ACTION_FORCE_WEBVIEW_CRASH == intent.action) {
+                Timber.d("Crashing WebView.")
+                stopDisconnectTimer()
+                forceWebViewCrash()
             } else if (BROADCAST_ACTION_OPEN_SETTINGS == intent.action) {
                 Timber.d("Browser open settings.")
                 openSettings()
@@ -161,6 +165,7 @@ abstract class BaseBrowserActivity : DaggerAppCompatActivity() {
         filter.addAction(BROADCAST_ACTION_JS_EXEC)
         filter.addAction(BROADCAST_ACTION_CLEAR_BROWSER_CACHE)
         filter.addAction(BROADCAST_ACTION_RELOAD_PAGE)
+        filter.addAction(BROADCAST_ACTION_FORCE_WEBVIEW_CRASH)
         filter.addAction(BROADCAST_ACTION_OPEN_SETTINGS)
         filter.addAction(BROADCAST_SCREEN_BRIGHTNESS_CHANGE)
         filter.addAction(BROADCAST_CLEAR_ALERT_MESSAGE)
@@ -356,6 +361,7 @@ abstract class BaseBrowserActivity : DaggerAppCompatActivity() {
     protected abstract fun evaluateJavascript(js: String)
     protected abstract fun clearCache()
     protected abstract fun reload()
+    protected abstract fun forceWebViewCrash()
     protected abstract fun complete()
     protected abstract fun openSettings()
 
@@ -364,6 +370,7 @@ abstract class BaseBrowserActivity : DaggerAppCompatActivity() {
         const val BROADCAST_ACTION_JS_EXEC = "BROADCAST_ACTION_JS_EXEC"
         const val BROADCAST_ACTION_CLEAR_BROWSER_CACHE = "BROADCAST_ACTION_CLEAR_BROWSER_CACHE"
         const val BROADCAST_ACTION_RELOAD_PAGE = "BROADCAST_ACTION_RELOAD_PAGE"
+        const val BROADCAST_ACTION_FORCE_WEBVIEW_CRASH = "BROADCAST_ACTION_FORCE_WEBVIEW_CRASH"
         const val BROADCAST_ACTION_OPEN_SETTINGS = "BROADCAST_ACTION_OPEN_SETTINGS"
         const val REQUEST_CODE_PERMISSION_AUDIO = 12
         const val REQUEST_CODE_PERMISSION_CAMERA = 13
