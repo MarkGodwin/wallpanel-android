@@ -361,6 +361,10 @@ constructor(private val context: Context, private val sharedPreferences: SharedP
         get() = this.sharedPreferences.getBoolean(PREF_SCREEN_BRIGHTNESS, false)
         set(value) = this.sharedPreferences.edit().putBoolean(PREF_SCREEN_BRIGHTNESS, value).apply()
 
+    var shutdownCommandEnabled: Boolean
+        get() = this.sharedPreferences.getBoolean(PREF_SHUTDOWN_ENABLED, false)
+        set(value) = this.sharedPreferences.edit().putBoolean(PREF_SHUTDOWN_ENABLED, value).apply()
+
     val ignoreSSLErrors: Boolean
         get() = getBoolPref(R.string.key_setting_ignore_ssl_errors,
                 R.string.default_setting_ignore_ssl_errors)
@@ -407,6 +411,7 @@ constructor(private val context: Context, private val sharedPreferences: SharedP
         const val PREF_CAMERA_ROTATE = "pref_camera_rotate"
         const val PREF_BROWSER_REFRESH_DISCONNECT = "pref_browser_refresh_disconnect"
         const val PREF_SCREEN_BRIGHTNESS = "pref_use_screen_brightness"
+        const val PREF_SHUTDOWN_ENABLED = "pref_shutdown_enabled"
         const val PREF_SCREENSAVER_DIM_VALUE = "pref_screensaver_dim_value"
         private val ROTATE_TIME_IN_MINUTES = 15
         const val PREF_IMAGE_ROTATION = "pref_image_rotation"

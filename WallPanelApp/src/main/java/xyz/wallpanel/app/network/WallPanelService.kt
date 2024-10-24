@@ -842,19 +842,8 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         } else {
             discoveryDef.put("name", displayName)
         }
-        val originDef = JSONObject()
-        var version = ""
-        try {
-            val pInfo: PackageInfo =
-                applicationContext.packageManager.getPackageInfo(applicationContext.packageName, 0)
-            version = pInfo.versionName
-        } catch (e: PackageManager.NameNotFoundException) {
-            e.printStackTrace()
-        }
-        originDef.put("name", "WallPanel")
-        originDef.put("sw", version)
-        originDef.put("url", "https://wallpanel.xyz")
-        discoveryDef.put("origin", originDef)
+        addOriginDiscovery(discoveryDef)
+
         discoveryDef.put("state_topic", "${configuration.mqttBaseTopic}${stateTopic}")
         if (unit != null) {
             discoveryDef.put("unit_of_measurement", unit)
@@ -877,6 +866,74 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         } else {
             discoveryDef.put("name", displayName)
         }
+        addOriginDiscovery(discoveryDef)
+        discoveryDef.put("state_topic", "${configuration.mqttBaseTopic}${stateTopic}")
+        discoveryDef.put("payload_on", true)
+        discoveryDef.put("payload_off", false)
+        discoveryDef.put("value_template", "{{ value_json.${fieldName} }}")
+        discoveryDef.put("device_class", deviceClass)
+        discoveryDef.put("unique_id", "wallpanel_${configuration.mqttClientId}_${sensorId}")
+        discoveryDef.put("device", getDeviceDiscoveryDef())
+        discoveryDef.put("availability_topic", "${configuration.mqttBaseTopic}connection")
+
+        return discoveryDef
+    }
+
+    private fun getButtonDiscoveryDef(displayName: String, commandId: String, deviceClass: String? = null): JSONObject
+    {
+        val discoveryDef = JSONObject()
+        if (configuration.mqttLegacyDiscoveryEntities) {
+            discoveryDef.put("name", "${configuration.mqttDiscoveryDeviceName} ${displayName}")
+        } else {
+            discoveryDef.put("name", displayName)
+        }
+        addOriginDiscovery(discoveryDef)
+
+        val availability = JSONObject()
+        availability.put("topic", "${configuration.mqttBaseTopic}connection")
+
+        discoveryDef.put("command_topic", "${configuration.mqttBaseTopic}command")
+        discoveryDef.put("command_template", "{ \"$commandId\": {{value}} }")
+        discoveryDef.put("payload_press", "true")
+        if(deviceClass != null) {
+            discoveryDef.put("device_class", deviceClass)
+        }
+        discoveryDef.put("unique_id", "wallpanel_${configuration.mqttClientId}_${commandId}")
+        discoveryDef.put("device", getDeviceDiscoveryDef())
+
+        return discoveryDef
+    }
+
+    private fun getNumberDiscoveryDef(displayName: String, commandId: String, min: Int, max: Int, deviceClass: String? = null): JSONObject
+    {
+        val discoveryDef = JSONObject()
+        if (configuration.mqttLegacyDiscoveryEntities) {
+            discoveryDef.put("name", "${configuration.mqttDiscoveryDeviceName} ${displayName}")
+        } else {
+            discoveryDef.put("name", displayName)
+        }
+        addOriginDiscovery(discoveryDef)
+
+        val availability = JSONObject()
+        availability.put("topic", "${configuration.mqttBaseTopic}connection")
+
+        discoveryDef.put("command_topic", "${configuration.mqttBaseTopic}command")
+        discoveryDef.put("command_template", "{ \"$commandId\": {{value}} }")
+        discoveryDef.put("min", min)
+        discoveryDef.put("max", max)
+        discoveryDef.put("mode", "slider")
+        discoveryDef.put("state_topic", "${configuration.mqttBaseTopic}state")
+        discoveryDef.put("value_template", "{{ value_json.brightness | float }}")
+        if(deviceClass != null) {
+            discoveryDef.put("device_class", deviceClass)
+        }
+        discoveryDef.put("unique_id", "wallpanel_${configuration.mqttClientId}_${commandId}")
+        discoveryDef.put("device", getDeviceDiscoveryDef())
+
+        return discoveryDef
+    }
+
+    private fun addOriginDiscovery(discoveryDef: JSONObject) {
         val originDef = JSONObject()
         var version = ""
         try {
@@ -890,17 +947,8 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         originDef.put("sw", version)
         originDef.put("url", "https://wallpanel.xyz")
         discoveryDef.put("origin", originDef)
-        discoveryDef.put("state_topic", "${configuration.mqttBaseTopic}${stateTopic}")
-        discoveryDef.put("payload_on", true)
-        discoveryDef.put("payload_off", false)
-        discoveryDef.put("value_template", "{{ value_json.${fieldName} }}")
-        discoveryDef.put("device_class", deviceClass)
-        discoveryDef.put("unique_id", "wallpanel_${configuration.mqttClientId}_${sensorId}")
-        discoveryDef.put("device", getDeviceDiscoveryDef())
-        discoveryDef.put("availability_topic", "${configuration.mqttBaseTopic}connection")
-
-        return discoveryDef
     }
+
 
     private fun publishDiscovery() {
         if (configuration.sensorsEnabled) {
@@ -956,7 +1004,47 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         } else {
             publishMessage("${configuration.mqttDiscoveryTopic}/tag/${configuration.mqttClientId}/qr/config", "", false)
         }
+
+        // Publish discovery for some useful commands as buttons
+        if(configuration.shutdownCommandEnabled) {
+            publishBasicCommandDiscovery("Shutdown", COMMAND_SHUTDOWN, "restart")
+        } else {
+            publishMessage("${configuration.mqttDiscoveryTopic}/button/${configuration.mqttClientId}/$COMMAND_SHUTDOWN/config", "", false)
+        }
+        publishBasicCommandDiscovery("Navigate Home", COMMAND_RELAUNCH)
+        publishBasicCommandDiscovery("Refresh Page", COMMAND_RELOAD)
+        publishBasicCommandDiscovery("Open Settings", COMMAND_SETTINGS)
+
+        // TODO: Switches for things that can be toggled, e.g. camera
+
+        // Numbers for values that can be adjusted
+        if(configuration.useScreenBrightness) {
+            publishBasicNumberDiscovery("Screen Brightness", COMMAND_BRIGHTNESS, 1, 255)
+        } else {
+            publishMessage("${configuration.mqttDiscoveryTopic}/number/${configuration.mqttClientId}/$COMMAND_BRIGHTNESS/config", "", false)
+        }
+
+        // Volume of player can't be read
+        // publishBasicNumberDiscovery("Volume", COMMAND_VOLUME, 0, 100)
+
     }
+
+    private fun publishBasicCommandDiscovery(displayName: String, commandId: String, deviceClass: String? = null) {
+        publishMessage(
+            "${configuration.mqttDiscoveryTopic}/button/${configuration.mqttClientId}/${commandId}/config",
+            getButtonDiscoveryDef(displayName, commandId, deviceClass).toString(),
+            true
+        )
+    }
+
+    private fun publishBasicNumberDiscovery(displayName: String, commandId: String, min: Int, max: Int, deviceClass: String? = null) {
+        publishMessage(
+            "${configuration.mqttDiscoveryTopic}/number/${configuration.mqttClientId}/${commandId}/config",
+            getNumberDiscoveryDef(displayName, commandId, min, max, deviceClass).toString(),
+            true
+        )
+    }
+
 
     private fun clearMotionDetected() {
         Timber.d("Clearing motion detected status")

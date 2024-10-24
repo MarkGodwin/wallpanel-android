@@ -105,6 +105,12 @@
             android:summary="Removes the app as the default Home screen (Important!! use this is you want to reset your device home app)."
             android:key="button_reset_home_app"/>
 
+        <SwitchPreference
+            android:defaultValue="false"
+            android:title="Enable Shutdown Command"
+            android:summary="Enables the ability to shut the device down remotely via the command API. Won't work with most devices."
+            android:key="pref_shutdown_enabled"/>
+
     </PreferenceCategory>
 
     <PreferenceCategory android:title="Settings Button">
