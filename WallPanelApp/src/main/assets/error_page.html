@@ -23,12 +23,23 @@
 <div class="wrapper">
     <div class="box">
         <center>
-            <img src="icon.png" width="360px" height="360px">
-            <h1>Connection Error</h1>
+            <img src="icon.png">
+            <h1>Connection Error: <span id="errText"></span></h1>
+            <p id="failedUrl"></p>
             <p>This page will automatically reload when connected.</p>
         </center>
     </div>
 </div>
-
 </body>
+
+<script language="JavaScript">
+    let urlParams = new URLSearchParams(window.location.search);
+    let errorText = urlParams.get("description");
+    if(errorText !== null)
+        document.getElementById("errText").innerText = errorText;
+    let failedUrl = urlParams.get("url");
+    if(failedUrl !== null)
+        document.getElementById("failedUrl").innerText = "Failed to load this URL: " + failedUrl;
+
+</script>
 </html>

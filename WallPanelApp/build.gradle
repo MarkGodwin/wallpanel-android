@@ -16,19 +16,19 @@
 
 plugins {
     id 'com.android.application'
-    id 'com.github.sgtsilvio.gradle.android-retrofix'
+    //id 'com.github.sgtsilvio.gradle.android-retrofix'
     id 'kotlin-android'
     id 'kotlin-parcelize'
     id 'kotlin-kapt' // Allows for Kotlin annotation processors
     //id 'androidx.navigation.safeargs.kotlin'
     //id 'dagger.hilt.android.plugin'
-    id 'com.google.gms.google-services'
-    id 'com.google.firebase.crashlytics'
+    //id 'com.google.gms.google-services'
+    //id 'com.google.firebase.crashlytics'
 }
 
-def versionMajor = 0
-def versionMinor = 12
-def versionPatch = 0
+def versionMajor = 1
+def versionMinor = 1
+def versionPatch = 1
 def versionBuild = 0 // bump for dog food builds, public betas, etc.
 
 def CODE() {
@@ -70,7 +70,7 @@ android {
     buildToolsVersion "30.0.3"
     defaultConfig {
         applicationId "xyz.wallpanel.app"
-        minSdkVersion 19
+        minSdkVersion 28
         targetSdkVersion 33
         versionCode versionMajor * 10000 + versionMinor * 1000 + versionPatch * 100 + versionBuild
         versionName "${versionMajor}.${versionMinor}.${versionPatch}.${versionBuild}"
@@ -97,6 +97,7 @@ android {
     }
 
     flavorDimensions "default"
+
 
     productFlavors {
         def BASE_ENVIRONMENT = "BASE_ENVIRONMENT"

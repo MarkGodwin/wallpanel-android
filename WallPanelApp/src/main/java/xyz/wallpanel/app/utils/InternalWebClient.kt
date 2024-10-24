@@ -14,6 +14,7 @@ import timber.log.Timber
 import xyz.wallpanel.app.R
 import xyz.wallpanel.app.persistence.Configuration
 import xyz.wallpanel.app.ui.views.WebClientCallback
+import java.net.URLEncoder
 import java.util.*
 import javax.inject.Inject
 
@@ -59,7 +60,9 @@ open class InternalWebClient(val resources: Resources, private val callback: Web
     ) {
         if (!callback.isFinishing()) {
             view.loadUrl("about:blank")
-            view.loadUrl("file:///android_asset/error_page.html")
+            val desc = URLEncoder.encode(description, "utf-8")
+            val url = URLEncoder.encode(failingUrl, "utf-8")
+            view.loadUrl("file:///android_asset/error_page.html?description=$desc&url=$url")
             callback.isConnected = false
             callback.startReloadDelay()
         }

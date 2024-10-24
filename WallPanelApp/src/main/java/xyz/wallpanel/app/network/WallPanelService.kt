@@ -48,6 +48,7 @@ import xyz.wallpanel.app.R
 import xyz.wallpanel.app.modules.*
 import xyz.wallpanel.app.persistence.Configuration
 import xyz.wallpanel.app.ui.activities.BaseBrowserActivity.Companion.BROADCAST_ACTION_CLEAR_BROWSER_CACHE
+import xyz.wallpanel.app.ui.activities.BaseBrowserActivity.Companion.BROADCAST_ACTION_FORCE_WEBVIEW_CRASH
 import xyz.wallpanel.app.ui.activities.BaseBrowserActivity.Companion.BROADCAST_ACTION_JS_EXEC
 import xyz.wallpanel.app.ui.activities.BaseBrowserActivity.Companion.BROADCAST_ACTION_LOAD_URL
 import xyz.wallpanel.app.ui.activities.BaseBrowserActivity.Companion.BROADCAST_ACTION_OPEN_SETTINGS
@@ -58,6 +59,7 @@ import xyz.wallpanel.app.utils.MqttUtils.Companion.COMMAND_BRIGHTNESS
 import xyz.wallpanel.app.utils.MqttUtils.Companion.COMMAND_CAMERA
 import xyz.wallpanel.app.utils.MqttUtils.Companion.COMMAND_CLEAR_CACHE
 import xyz.wallpanel.app.utils.MqttUtils.Companion.COMMAND_EVAL
+import xyz.wallpanel.app.utils.MqttUtils.Companion.COMMAND_FORCE_WEBVIEW_CRASH
 import xyz.wallpanel.app.utils.MqttUtils.Companion.COMMAND_RELAUNCH
 import xyz.wallpanel.app.utils.MqttUtils.Companion.COMMAND_RELOAD
 import xyz.wallpanel.app.utils.MqttUtils.Companion.COMMAND_SENSOR
@@ -65,6 +67,7 @@ import xyz.wallpanel.app.utils.MqttUtils.Companion.COMMAND_SENSOR_FACE
 import xyz.wallpanel.app.utils.MqttUtils.Companion.COMMAND_SENSOR_MOTION
 import xyz.wallpanel.app.utils.MqttUtils.Companion.COMMAND_SENSOR_QR_CODE
 import xyz.wallpanel.app.utils.MqttUtils.Companion.COMMAND_SETTINGS
+import xyz.wallpanel.app.utils.MqttUtils.Companion.COMMAND_SHUTDOWN
 import xyz.wallpanel.app.utils.MqttUtils.Companion.COMMAND_SPEAK
 import xyz.wallpanel.app.utils.MqttUtils.Companion.COMMAND_STATE
 import xyz.wallpanel.app.utils.MqttUtils.Companion.COMMAND_URL
@@ -642,6 +645,11 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
             if (commandJson.has(COMMAND_VOLUME)) {
                 setVolume((commandJson.getInt(COMMAND_VOLUME).toFloat() / 100))
             }
+            if(commandJson.has(COMMAND_SHUTDOWN)) {
+                if (commandJson.getBoolean(COMMAND_SHUTDOWN)) {
+                    startShutdown()
+                }
+            }
         } catch (ex: JSONException) {
             Timber.e("Invalid JSON passed as a command: " + commandJson.toString())
             return false
@@ -705,6 +713,13 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
     // TODO temporarily wake screen
     private fun wakeScreen() {
         val intent = Intent(BROADCAST_SCREEN_WAKE)
+        val bm = LocalBroadcastManager.getInstance(applicationContext)
+        bm.sendBroadcast(intent)
+    }
+
+    private fun startShutdown()
+    {
+        val intent = Intent(BROADCAST_SYSTEM_SHUTDOWN)
         val bm = LocalBroadcastManager.getInstance(applicationContext)
         bm.sendBroadcast(intent)
     }
@@ -1126,6 +1141,6 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         const val BROADCAST_SCREEN_WAKE_ON = "BROADCAST_SCREEN_WAKE_ON"
         const val BROADCAST_SCREEN_WAKE_OFF = "BROADCAST_SCREEN_WAKE_OFF"
         const val BROADCAST_SCREEN_BRIGHTNESS_CHANGE = "BROADCAST_SCREEN_BRIGHTNESS_CHANGE"
-        const val BROADCAST_CONNTED = "BROADCAST_SCREEN_BRIGHTNESS_CHANGE"
+        const val BROADCAST_SYSTEM_SHUTDOWN = "BROADCAST_SYSTEM_SHUTDOWN"
     }
 }

@@ -25,9 +25,9 @@ class Configuration @Inject
 constructor(private val context: Context, private val sharedPreferences: SharedPreferences) {
 
     // APP
-    var isFirstTime: Boolean
-        get() = this.sharedPreferences.getBoolean(PREF_FIRST_TIME, true)
-        set(value) = this.sharedPreferences.edit().putBoolean(PREF_FIRST_TIME, value).apply()
+    var hasCode: Boolean
+        get() = this.sharedPreferences.getBoolean(PREF_HAS_CODE, false)
+        set(value) = this.sharedPreferences.edit().putBoolean(PREF_HAS_CODE, value).apply()
 
     val appPreventSleep: Boolean
         get() = getBoolPref(R.string.key_setting_app_preventsleep,
@@ -210,8 +210,11 @@ constructor(private val context: Context, private val sharedPreferences: SharedP
         get() = getStringPref(R.string.key_setting_mqtt_serverport, R.string.default_setting_mqtt_serverport).trim().toInt()
 
     val mqttBaseTopic: String
-        get() = getStringPref(R.string.key_setting_mqtt_basetopic,
-                R.string.default_setting_mqtt_basetopic)
+        get()
+        {
+            val pref = getStringPref(R.string.key_setting_mqtt_basetopic, R.string.default_setting_mqtt_basetopic)
+            return if(pref.endsWith("/")) pref else "$pref/"
+        }
 
     val mqttClientId: String
         get() = getStringPref(R.string.key_setting_mqtt_clientid,
@@ -271,6 +274,12 @@ constructor(private val context: Context, private val sharedPreferences: SharedP
         get() = this.sharedPreferences.getBoolean(context.getString(R.string.key_pref_browser_refresh), true)
         set(value) {
             sharedPreferences.edit().putBoolean(context.getString(R.string.key_pref_browser_refresh), value).apply()
+        }
+
+    var clearCookies: Boolean
+        get() = this.sharedPreferences.getBoolean(context.getString(R.string.key_pref_clear_cookies), false)
+        set(value) {
+            sharedPreferences.edit().putBoolean(context.getString(R.string.key_pref_clear_cookies), value).apply()
         }
 
     val cameraFPS: Float
@@ -392,7 +401,7 @@ constructor(private val context: Context, private val sharedPreferences: SharedP
         private const val PREF_SETTINGS_TRANSPARENT = "pref_settings_transparent"
         private const val PREF_SETTINGS_DISABLE = "pref_settings_disable"
         private const val PREF_SETTINGS_LOCATION = "pref_settings_location"
-        const val PREF_FIRST_TIME = "pref_first_time"
+        const val PREF_HAS_CODE = "pref_has_code"
         const val PREF_WRITE_SCREEN_PERMISSIONS = "pref_write_screen_permissions"
         const val PREF_CAMERA_PERMISSIONS = "pref_camera_permissions"
         const val PREF_CAMERA_ROTATE = "pref_camera_rotate"

@@ -212,6 +212,8 @@
     <string name="toast_empty_url">Url is empty…</string>
     <string name="pref_browser_refresh_summary">When active, allows you to pull down on the browser window to refresh the page.</string>
     <string name="pref_browser_refresh_title">Browser Refresh</string>
+    <string name="pref_clear_cookies_summary">When enabled, cookies will be cleared once when returning to the Wallpanel.</string>
+    <string name="pref_clear_cookies_title">Clear cookies on Save</string>
     <string name="error_mqtt_exception">There was an error initializing the MQTT client, please check your settings.</string>
 
     <string name="preference_title_screen">Display Settings</string>
@@ -274,6 +276,7 @@
     <string name="toast_code_alarm_set">Code has been set!</string>
     <string name="toast_code_unchanged">Code unchanged!</string>
     <string name="toast_code_changed">Code changed successfully!</string>
+    <string name="toast_code_reset">Code reset - No code required!</string>
     <string name="toast_code_not_match">Code does not match, try again.</string>
     <string name="toast_code_invalid">Code is invalid, please try again.</string>
 

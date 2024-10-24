@@ -74,6 +74,7 @@ class SettingsFragment : BaseSettingsFragment() {
     private var aboutPreference: Preference? = null
     private var brightnessPreference: Preference? = null
     private var browserRefreshPreference: SwitchPreference? = null
+    private var clearCookiesPreference: SwitchPreference? = null
 
     private var clockSaverPreference: SwitchPreference? = null
     private var inactivityPreference: ListPreference? = null
@@ -190,6 +191,7 @@ class SettingsFragment : BaseSettingsFragment() {
         openOnBootPreference = findPreference<SwitchPreference>(getString(R.string.key_setting_android_startonboot)) as SwitchPreference
         hardwareAcceleration = findPreference<SwitchPreference>(getString(R.string.key_hadware_accelerated_enabled)) as SwitchPreference
         browserRefreshPreference = findPreference<SwitchPreference>(getString(R.string.key_pref_browser_refresh)) as SwitchPreference
+        clearCookiesPreference = findPreference<SwitchPreference>(getString(R.string.key_pref_clear_cookies)) as SwitchPreference
         clockSaverPreference = findPreference<SwitchPreference>(getString(R.string.key_screensaver)) as SwitchPreference
         inactivityPreference = findPreference<ListPreference>(PREF_SCREEN_INACTIVITY_TIME) as ListPreference
         dimPreference = findPreference<ListPreference>(PREF_SCREENSAVER_DIM_VALUE) as ListPreference
@@ -498,12 +500,21 @@ class SettingsFragment : BaseSettingsFragment() {
                             showCodeDialog()
                         }
                     } else if (code == tempCode) {
-                        configuration.isFirstTime = false;
-                        configuration.settingsCode = tempCode
-                        tempCode = ""
+                        configuration.hasCode = false;
+                        if(tempCode == "0000") {
+                            configuration.hasCode = false
+                            configuration.settingsCode = ""
+                        }
+                        else {
+                            configuration.hasCode = true;
+                            configuration.settingsCode = tempCode
+                        }
                         confirmCode = false
                         dialogUtils.clearDialogs()
-                        Toast.makeText(activity, R.string.toast_code_changed, Toast.LENGTH_LONG).show()
+                        if(!configuration.hasCode)
+                            Toast.makeText(activity, R.string.toast_code_reset, Toast.LENGTH_LONG).show()
+                        else
+                            Toast.makeText(activity, R.string.toast_code_changed, Toast.LENGTH_LONG).show()
                     } else {
                         tempCode = ""
                         confirmCode = false

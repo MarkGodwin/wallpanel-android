@@ -44,6 +44,7 @@ import xyz.wallpanel.app.network.WallPanelService.Companion.BROADCAST_SCREEN_WAK
 import xyz.wallpanel.app.network.WallPanelService.Companion.BROADCAST_SCREEN_WAKE_OFF
 import xyz.wallpanel.app.network.WallPanelService.Companion.BROADCAST_SCREEN_WAKE_ON
 import xyz.wallpanel.app.network.WallPanelService.Companion.BROADCAST_SERVICE_STARTED
+import xyz.wallpanel.app.network.WallPanelService.Companion.BROADCAST_SYSTEM_SHUTDOWN
 import xyz.wallpanel.app.network.WallPanelService.Companion.BROADCAST_TOAST_MESSAGE
 import xyz.wallpanel.app.persistence.Configuration
 import xyz.wallpanel.app.utils.DialogUtils
@@ -134,7 +135,20 @@ abstract class BaseBrowserActivity : DaggerAppCompatActivity() {
                 hideScreenSaver()
             } else if (BROADCAST_SERVICE_STARTED == intent.action && !isFinishing) {
                 //firstLoadUrl() // load the url after service started
+            } else if (BROADCAST_SYSTEM_SHUTDOWN == intent.action) {
+                val proc =
+                    Runtime.getRuntime().exec(arrayOf("/system/bin/setprop", "sys.powerctl", "shutdown"))
+                val output = proc.inputStream.bufferedReader().use { it.readText() }
+                proc.waitFor()
+
+                //var x = getSystemService(Context.POWER_SERVICE) as PowerManager;
+                //x.reboot("System shutdown request")
+
+                //startActivity(Intent("android.intent.action.ACTION_REQUEST_SHUTDOWN"));
+
+                Timber.d("System shutdown ${proc.exitValue()}: $output")
             }
+
         }
     }
 
@@ -175,6 +189,7 @@ abstract class BaseBrowserActivity : DaggerAppCompatActivity() {
         filter.addAction(BROADCAST_SCREEN_WAKE_ON)
         filter.addAction(BROADCAST_SCREEN_WAKE_OFF)
         filter.addAction(BROADCAST_SERVICE_STARTED)
+        filter.addAction(BROADCAST_SYSTEM_SHUTDOWN)
         val bm = LocalBroadcastManager.getInstance(this)
         bm.registerReceiver(mBroadcastReceiver, filter)
         resetInactivityTimer()

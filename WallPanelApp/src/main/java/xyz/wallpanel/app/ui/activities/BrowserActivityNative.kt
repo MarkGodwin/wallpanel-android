@@ -99,7 +99,7 @@ class BrowserActivityNative : BaseBrowserActivity(), LifecycleObserver, WebClien
             configuration.mqttUsername = BuildConfig.BROKER_USERNAME
             configuration.mqttPassword = BuildConfig.BROKER_PASS
             configuration.appLaunchUrl = BuildConfig.HASS_URL
-            configuration.isFirstTime = false
+            configuration.hasCode = false
             configuration.settingsCode = BuildConfig.CODE.toString()
             configuration.hasClockScreenSaver = true
         }
@@ -117,7 +117,7 @@ class BrowserActivityNative : BaseBrowserActivity(), LifecycleObserver, WebClien
         }
 
         binding.launchSettingsFab.setOnClickListener {
-            if (configuration.isFirstTime) {
+            if (!configuration.hasCode) {
                 openSettings()
             } else {
                 showCodeBottomSheet()
@@ -145,6 +145,16 @@ class BrowserActivityNative : BaseBrowserActivity(), LifecycleObserver, WebClien
             webView.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
         }
 
+        var doReload = configuration.hasSettingsUpdates()
+        if(configuration.clearCookies)
+        {
+            configuration.clearCookies = false
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                CookieManager.getInstance().removeAllCookies(null)
+            }
+            doReload = true
+        }
+
         if (configuration.browserRefresh) {
             binding.swipeContainer.setOnRefreshListener {
                 clearCache()
@@ -160,7 +170,7 @@ class BrowserActivityNative : BaseBrowserActivity(), LifecycleObserver, WebClien
 
         setupSettingsButton()
 
-        if (configuration.hasSettingsUpdates()) {
+        if (doReload) {
             initWebPageLoad()
         }
     }
@@ -215,13 +225,16 @@ class BrowserActivityNative : BaseBrowserActivity(), LifecycleObserver, WebClien
 
     override fun clearCache() {
         webView.clearCache(true)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            CookieManager.getInstance().removeAllCookies(null)
-        }
     }
 
     override fun reload() {
         webView.reload()
+    }
+
+    @RequiresApi(Build.VERSION_CODES.Q)
+    override fun forceWebViewCrash() {
+        val proc = webView!!.webViewRenderProcess;
+        proc!!.terminate();
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -243,7 +256,7 @@ class BrowserActivityNative : BaseBrowserActivity(), LifecycleObserver, WebClien
         webSettings?.loadWithOverviewMode = true
         webSettings?.useWideViewPort = true
         webSettings?.pluginState = WebSettings.PluginState.ON
-        webSettings?.setRenderPriority(WebSettings.RenderPriority.HIGH)
+        //webSettings?.setRenderPriority(WebSettings.RenderPriority.HIGH)
         // webSettings?.cacheMode = WebSettings.LOAD_NO_CACHE;
         webSettings?.mediaPlaybackRequiresUserGesture = false
 
@@ -326,7 +339,7 @@ class BrowserActivityNative : BaseBrowserActivity(), LifecycleObserver, WebClien
     @SuppressLint("ClickableViewAccessibility")
     private fun configureWebView(view: ViewGroup) {
         webView = binding.activityBrowserWebviewNative
-        webView.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+        //webView.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
         // Force links and redirects to open in the WebView instead of in a browser
         configureWebChromeClient()
         configureWebViewClient()

@@ -73,6 +73,7 @@ constructor(context: Context, private val configuration: Configuration): Context
                 } else if (screenScreenBrightness in 1..255 && screenSaver) {
                     Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, screenScreenBrightness)
                 }
+
             } catch (e: SecurityException) {
                 Timber.e(e.message)
             }

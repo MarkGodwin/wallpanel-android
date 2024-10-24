@@ -10,8 +10,8 @@ body * {
 }
 
 body {
-  font: normal 100%/1.15 "Merriweather", serif;
-  background-color: #ffffff;
+  font: normal 100%/1.15 sans-serif;
+  background-color: #000000;
   color: #fff;
 }
 
@@ -37,7 +37,7 @@ h1, p:not(:last-of-type) { }
 h1 {
   margin: 0 0 1rem 0;
   font-size: 2em;
-  color: #216f79;
+  color: #596f79;
 }
 
 p {
@@ -45,7 +45,7 @@ margin-top: 0.5em;
   margin-bottom: 0.5em;
   font-size: 1.5em;
   text-align: center;
-  color: #216f79;
+  color: #596f79;
 }
 
 p:first-of-type { margin-top: 0em; }
@@ -54,9 +54,9 @@ p > a {
   border-bottom: 1px dashed #216f79;
   font-style: italic;
   text-decoration: none;
-  color: #216f79;
+  color: #596f79;
 }
 
-p > a:hover { text-shadow: 0 0 6px #216f79; }
+p > a:hover { text-shadow: 0 0 6px #596f79; }
 
 p img { vertical-align: bottom; }
