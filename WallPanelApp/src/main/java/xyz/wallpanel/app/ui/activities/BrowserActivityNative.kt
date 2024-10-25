@@ -26,7 +26,6 @@ import android.os.Looper
 import android.provider.Browser
 import android.view.*
 import android.webkit.*
-import android.widget.Button
 import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AlertDialog

@@ -131,7 +131,7 @@ abstract class BaseBrowserActivity : DaggerAppCompatActivity() {
                 //firstLoadUrl() // load the url after service started
             } else if (BROADCAST_SYSTEM_SHUTDOWN == intent.action) {
                 val proc =
-                    Runtime.getRuntime().exec(arrayOf("/system/bin/setprop", "sys.powerctl", "shutdown"))
+                    Runtime.getRuntime().exec(arrayOf("su", "0", "/system/bin/svc", "power", "shutdown"))
                 val output = proc.inputStream.bufferedReader().use { it.readText() }
                 proc.waitFor()
 
