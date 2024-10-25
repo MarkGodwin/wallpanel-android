@@ -38,7 +38,7 @@ import xyz.wallpanel.app.network.MQTTOptions
 import xyz.wallpanel.app.network.WallPanelService
 import xyz.wallpanel.app.network.WallPanelService.Companion.BROADCAST_ALERT_MESSAGE
 import xyz.wallpanel.app.network.WallPanelService.Companion.BROADCAST_CLEAR_ALERT_MESSAGE
-import xyz.wallpanel.app.network.WallPanelService.Companion.BROADCAST_EVENT_SCREEN_TOUCH
+import xyz.wallpanel.app.network.WallPanelService.Companion.BROADCAST_EVENT_SCREENSAVER_CHANGE
 import xyz.wallpanel.app.network.WallPanelService.Companion.BROADCAST_SCREEN_BRIGHTNESS_CHANGE
 import xyz.wallpanel.app.network.WallPanelService.Companion.BROADCAST_SCREEN_WAKE
 import xyz.wallpanel.app.network.WallPanelService.Companion.BROADCAST_SCREEN_WAKE_OFF
@@ -71,23 +71,24 @@ abstract class BaseBrowserActivity : DaggerAppCompatActivity() {
     private var decorView: View? = null
     private val inactivityHandler: Handler = Handler(Looper.getMainLooper())
     private var userPresent: Boolean = false
-    private var hasWakeScreen = false
+    private var keepScreenOn = false
     var displayProgress = true
     var zoomLevel = 1.0f
+    var screenSaverActive = false
 
     // handler for received data from service
     private val mBroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (BROADCAST_ACTION_LOAD_URL == intent.action) {
                 val url = intent.getStringExtra(BROADCAST_ACTION_LOAD_URL)
+                resetInactivityTimer()
                 url?.let {
                     loadWebViewUrl(url)
-                    stopDisconnectTimer()
                 }
             } else if (BROADCAST_ACTION_JS_EXEC == intent.action) {
+                resetInactivityTimer()
                 val js = intent.getStringExtra(BROADCAST_ACTION_JS_EXEC)
                 js?.let {
-                    stopDisconnectTimer()
                     evaluateJavascript(js)
                 }
             } else if (BROADCAST_ACTION_CLEAR_BROWSER_CACHE == intent.action) {
@@ -95,44 +96,37 @@ abstract class BaseBrowserActivity : DaggerAppCompatActivity() {
                 clearCache()
             } else if (BROADCAST_ACTION_RELOAD_PAGE == intent.action) {
                 Timber.d("Browser page reloading.")
-                stopDisconnectTimer()
+                resetInactivityTimer()
                 reload()
             } else if (BROADCAST_ACTION_FORCE_WEBVIEW_CRASH == intent.action) {
                 Timber.d("Crashing WebView.")
-                stopDisconnectTimer()
+                resetInactivityTimer()
                 forceWebViewCrash()
             } else if (BROADCAST_ACTION_OPEN_SETTINGS == intent.action) {
                 Timber.d("Browser open settings.")
                 openSettings()
             } else if (BROADCAST_TOAST_MESSAGE == intent.action && !isFinishing) {
                 val message = intent.getStringExtra(BROADCAST_TOAST_MESSAGE)
-                stopDisconnectTimer()
+                resetInactivityTimer()
                 Toast.makeText(applicationContext, message, Toast.LENGTH_SHORT).show()
             } else if (BROADCAST_ALERT_MESSAGE == intent.action && !isFinishing) {
                 val message = intent.getStringExtra(BROADCAST_ALERT_MESSAGE)
-                stopDisconnectTimer()
+                resetInactivityTimer()
                 message?.let {
                     dialogUtils.showAlertDialog(this@BaseBrowserActivity, message)
                 }
             } else if (BROADCAST_CLEAR_ALERT_MESSAGE == intent.action && !isFinishing) {
                 dialogUtils.clearDialogs()
-                if (hasWakeScreen.not()) {
-                    resetInactivityTimer()
-                    resetScreenBrightness(false)
-                }
             } else if (BROADCAST_SCREEN_WAKE == intent.action && !isFinishing) {
-                stopDisconnectTimer()
+                resetInactivityTimer()
             } else if (BROADCAST_SCREEN_WAKE_ON == intent.action && !isFinishing) {
-                hasWakeScreen = true
-                resetScreenBrightness(false)
-                clearInactivityTimer()
+                keepScreenOn = true
+                resetInactivityTimer()
                 window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             } else if (BROADCAST_SCREEN_WAKE_OFF == intent.action && !isFinishing) {
-                hasWakeScreen = false
+                keepScreenOn = false
                 resetInactivityTimer()
                 window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            } else if (BROADCAST_ACTION_RELOAD_PAGE == intent.action && !isFinishing) {
-                hideScreenSaver()
             } else if (BROADCAST_SERVICE_STARTED == intent.action && !isFinishing) {
                 //firstLoadUrl() // load the url after service started
             } else if (BROADCAST_SYSTEM_SHUTDOWN == intent.action) {
@@ -235,15 +229,8 @@ abstract class BaseBrowserActivity : DaggerAppCompatActivity() {
     override fun onUserInteraction() {
         onWindowFocusChanged(true)
         Timber.d("onUserInteraction")
-        if (!userPresent) {
-            userPresent = true
-            resetScreenBrightness(false)
-            val intent = Intent(BROADCAST_EVENT_SCREEN_TOUCH)
-            intent.putExtra(BROADCAST_EVENT_SCREEN_TOUCH, true)
-            val bm = LocalBroadcastManager.getInstance(applicationContext)
-            bm.sendBroadcast(intent)
-        }
-        if (hasWakeScreen.not()) {
+        userPresent = true
+        if (keepScreenOn.not()) {
             resetInactivityTimer()
         }
     }
@@ -286,14 +273,6 @@ abstract class BaseBrowserActivity : DaggerAppCompatActivity() {
         }
     }
 
-    internal fun resetScreen() {
-        Timber.d("resetScreen Called")
-        val intent = Intent(WallPanelService.BROADCAST_EVENT_SCREEN_TOUCH)
-        intent.putExtra(WallPanelService.BROADCAST_EVENT_SCREEN_TOUCH, true)
-        val bm = LocalBroadcastManager.getInstance(applicationContext)
-        bm.sendBroadcast(intent)
-    }
-
     fun pageLoadComplete(url: String) {
         Timber.d("pageLoadComplete currentUrl $url")
         val intent = Intent(WallPanelService.BROADCAST_EVENT_URL_CHANGE)
@@ -303,34 +282,28 @@ abstract class BaseBrowserActivity : DaggerAppCompatActivity() {
         complete()
     }
 
-    private fun resetInactivityTimer() {
+    protected fun resetInactivityTimer() {
+        userPresent = true
         hideScreenSaver()
         inactivityHandler.removeCallbacks(inactivityCallback)
-        inactivityHandler.postDelayed(inactivityCallback, configuration.inactivityTime)
-    }
-
-    private fun clearInactivityTimer() {
-        hideScreenSaver()
-        inactivityHandler.removeCallbacks(inactivityCallback)
-    }
-
-    fun stopDisconnectTimer() {
-        Timber.d("stopDisconnectTimer")
-        if (userPresent.not()) {
-            userPresent = true
-            resetScreenBrightness(false)
-        }
-        if (hasWakeScreen.not()) {
-            resetInactivityTimer()
+        if(!keepScreenOn) {
+            inactivityHandler.postDelayed(inactivityCallback, configuration.inactivityTime)
         }
     }
 
     open fun hideScreenSaver() {
         Timber.d("hideScreenSaver")
-        val isScreenSaver = dialogUtils.hideScreenSaverDialog()
-        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        if (isScreenSaver) {
+        if(screenSaverActive) {
+            dialogUtils.hideScreenSaverDialog()
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             resetScreenBrightness(false)
+
+            screenSaverActive = false
+
+            val intent = Intent(BROADCAST_EVENT_SCREENSAVER_CHANGE)
+            intent.putExtra("active", false)
+            val bm = LocalBroadcastManager.getInstance(applicationContext)
+            bm.sendBroadcast(intent)
         }
     }
 
@@ -339,31 +312,34 @@ abstract class BaseBrowserActivity : DaggerAppCompatActivity() {
      * with the alarm disabled because the disable time will be longer than this.
      */
     open fun showScreenSaver() {
-        if (configuration.hasDimScreenSaver) {
-            inactivityHandler.removeCallbacks(inactivityCallback)
-            resetScreenBrightness(true)
-        } else if ((configuration.hasClockScreenSaver
+        if ((configuration.hasClockScreenSaver
                     || configuration.webScreenSaver
                     || configuration.hasScreenSaverWallpaper
                     || configuration.hasDimScreenSaver)
             && !isFinishing
         ) {
             inactivityHandler.removeCallbacks(inactivityCallback)
-            dialogUtils.showScreenSaver(
-                this@BaseBrowserActivity,
-                {
-                    dialogUtils.hideScreenSaverDialog()
-                    resetScreenBrightness(false)
-                    resetInactivityTimer()
-                },
-                configuration.webScreenSaver,
-                configuration.webScreenSaverUrl,
-                configuration.hasScreenSaverWallpaper,
-                configuration.hasClockScreenSaver,
-                configuration.imageRotation.toLong(),
-                configuration.appPreventSleep
-            )
+            if(!configuration.hasDimScreenSaver) {
+                dialogUtils.showScreenSaver(
+                    this@BaseBrowserActivity,
+                    {
+                        resetInactivityTimer()
+                    },
+                    configuration.webScreenSaver,
+                    configuration.webScreenSaverUrl,
+                    configuration.hasScreenSaverWallpaper,
+                    configuration.hasClockScreenSaver,
+                    configuration.imageRotation.toLong(),
+                    configuration.appPreventSleep
+                )
+            }
             resetScreenBrightness(true)
+            screenSaverActive = true
+
+            val intent = Intent(BROADCAST_EVENT_SCREENSAVER_CHANGE)
+            intent.putExtra("active", true)
+            val bm = LocalBroadcastManager.getInstance(applicationContext)
+            bm.sendBroadcast(intent)
         }
     }
 

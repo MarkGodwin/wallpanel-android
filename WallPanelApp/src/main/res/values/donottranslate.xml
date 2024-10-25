@@ -36,6 +36,7 @@
     <string name="key_setting_sensors_enabled">setting_sensors_enabled</string>
     <string name="key_hadware_accelerated_enabled">hadware_accelerated_enabled</string>
     <string name="default_setting_sensors_value">false</string>
+    <string name="default_setting_sensor_battery_value">true</string>
     <string name="default_hardware_accelerated_value">true</string>
     <string name="key_setting_mqtt_basetopic">setting_mqtt_basetopic</string>
     <string name="key_setting_mqtt_serverport">setting_mqtt_serverport</string>

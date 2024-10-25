@@ -109,20 +109,15 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
     private var audioPlayerBusy: Boolean = false
     private var httpServer: AsyncHttpServer? = null
     private val mBinder = WallPanelServiceBinder()
-    private val motionClearHandler = Handler(Looper.getMainLooper())
-    private val appStateClearHandler = Handler(Looper.getMainLooper())
-    private val qrCodeClearHandler = Handler(Looper.getMainLooper())
-    private val faceClearHandler = Handler(Looper.getMainLooper())
-    private val wakeScreenHandler = Handler(Looper.getMainLooper())
+    private val handler = Handler(Looper.getMainLooper())
     private var textToSpeechModule: TextToSpeechModule? = null
     private var mqttModule: MQTTModule? = null
     private var connectionLiveData: ConnectionLiveData? = null
     private var hasNetwork = AtomicBoolean(true)
     private var motionDetected: Boolean = false
-    private var appStatePublished: Boolean = false
+    private var isScreenSaverActive: Boolean = false
     private var qrCodeRead: Boolean = false
     private var faceDetected: Boolean = false
-    private val reconnectHandler = Handler(Looper.getMainLooper())
     private var appLaunchUrl: String? = null
     private var localBroadCastManager: LocalBroadcastManager? = null
     private var mqttAlertMessageShown = false
@@ -186,7 +181,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
 
         val filter = IntentFilter()
         filter.addAction(BROADCAST_EVENT_URL_CHANGE)
-        filter.addAction(BROADCAST_EVENT_SCREEN_TOUCH)
+        filter.addAction(BROADCAST_EVENT_SCREENSAVER_CHANGE)
         filter.addAction(Intent.ACTION_SCREEN_ON)
         filter.addAction(Intent.ACTION_SCREEN_OFF)
         filter.addAction(Intent.ACTION_USER_PRESENT)
@@ -207,7 +202,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         sensorReader.stopReadings()
         stopHttp()
         stopPowerOptions()
-        reconnectHandler.removeCallbacksAndMessages(null)
+        handler.removeCallbacksAndMessages(null)
     }
 
     override fun onBind(intent: Intent): IBinder {
@@ -239,6 +234,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
                 state.put(MqttUtils.STATE_SCREEN_ON, isScreenOn)
                 state.put(MqttUtils.STATE_CAMERA, configuration.cameraEnabled)
                 state.put(MqttUtils.STATE_BRIGHTNESS, screenUtils.getCurrentScreenBrightness())
+                state.put(MqttUtils.STATE_SCREENSAVER, isScreenSaverActive)
             } catch (e: JSONException) {
                 e.printStackTrace()
             }
@@ -337,8 +333,8 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
             clearAlertMessage() // clear any dialogs
             mqttAlertMessageShown = false
         }
-        clearFaceDetected()
-        clearMotionDetected()
+        clearFaceDetected(true)
+        clearMotionDetected(true)
         publishApplicationState()
         if (configuration.sensorsEnabled) {
             sensorReader.refreshSensors()
@@ -367,8 +363,8 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
                 mqttAlertMessageShown = true
             }
             if (!mqttConnecting) {
-                reconnectHandler.removeCallbacksAndMessages(null)
-                reconnectHandler.postDelayed(restartMqttRunnable, 30000)
+                handler.removeCallbacks(restartMqttRunnable)
+                handler.postDelayed(restartMqttRunnable, 30000)
                 mqttConnecting = true
             }
         }
@@ -599,8 +595,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
             }
             if (commandJson.has(COMMAND_WAKE)) {
                 if (commandJson.getBoolean(COMMAND_WAKE).or(false)) {
-                    val fallback = configuration.inactivityTime/1000 // if no wake time, use inactivity time, convert to seconds
-                    val wakeTime = commandJson.optLong(COMMAND_WAKETIME, fallback) * 1000 // convert to milliseconds
+                    val wakeTime = commandJson.optLong(COMMAND_WAKETIME, 0) * 1000 // convert to milliseconds
                     if(wakeTime > 0) {
                         wakeScreenOn(wakeTime)
                     } else {
@@ -728,7 +723,8 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
     private fun wakeScreenOn(wakeTime: Long) {
         if (partialWakeLock != null && !partialWakeLock!!.isHeld) {
             partialWakeLock?.acquire(wakeTime)
-            wakeScreenHandler.postDelayed(clearWakeScreenRunnable, wakeTime)
+            handler.removeCallbacks(clearWakeScreenRunnable)
+            handler.postDelayed(clearWakeScreenRunnable, wakeTime)
             sendWakeScreenOn()
         }
     }
@@ -738,7 +734,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
     }
 
     private fun wakeScreenOff() {
-        wakeScreenHandler.removeCallbacks(clearWakeScreenRunnable)
+        handler.removeCallbacks(clearWakeScreenRunnable)
         if (partialWakeLock != null && partialWakeLock!!.isHeld) {
             partialWakeLock!!.release()
         }
@@ -783,6 +779,10 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         bm.sendBroadcast(intent)
     }
 
+    private val clearMotionDetectedRunnable = Runnable {
+        clearMotionDetected()
+    }
+
     private fun publishMotionDetected() {
         val delay = (configuration.motionResetTime * 1000).toLong()
         if (!motionDetected) {
@@ -794,20 +794,23 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
             }
             motionDetected = true
             publishCommand(COMMAND_SENSOR_MOTION, data)
-            motionClearHandler.postDelayed({ clearMotionDetected() }, delay)
         }
+
+        handler.removeCallbacks(clearMotionDetectedRunnable)
+        handler.postDelayed(clearMotionDetectedRunnable, delay)
     }
 
-    private fun publishApplicationState(delay: Int = 300) {
-        if (!appStatePublished) {
-            appStatePublished = true
-            publishCommand(COMMAND_STATE, state)
-            appStateClearHandler.postDelayed({ clearPublishApplicationState() }, delay.toLong())
-        }
+    private val appStateRunnable = Runnable {
+        publishCommand(COMMAND_STATE, state)
     }
 
-    private fun clearPublishApplicationState() {
-        appStatePublished = false
+    private fun publishApplicationState(delay: Int = 500) {
+        handler.removeCallbacks(appStateRunnable)
+        handler.postDelayed(appStateRunnable, delay.toLong())
+    }
+
+    private val clearFaceDetectedRunnable = Runnable {
+        clearFaceDetected()
     }
 
     private fun publishFaceDetected() {
@@ -822,8 +825,23 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
             publishCommand(COMMAND_SENSOR_FACE, data)
 
         }
-        faceClearHandler.removeCallbacksAndMessages(null)
-        faceClearHandler.postDelayed({ clearFaceDetected() }, 3000)
+        handler.removeCallbacksAndMessages(clearFaceDetectedRunnable)
+        handler.postDelayed(clearFaceDetectedRunnable, 5000)
+    }
+
+    private fun clearFaceDetected(force: Boolean = false)
+    {
+        if (faceDetected || force) {
+            Timber.d("Clearing face detected status")
+            val data = JSONObject()
+            try {
+                data.put(VALUE, false)
+            } catch (ex: JSONException) {
+                ex.printStackTrace()
+            }
+            faceDetected = false
+            publishCommand(MqttUtils.COMMAND_SENSOR_FACE, data)
+        }
     }
 
     private fun getDeviceDiscoveryDef(): JSONObject {
@@ -837,11 +855,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
 
     private fun getSensorDiscoveryDef(displayName: String, stateTopic: String, deviceClass: String?, unit: String?, sensorId: String): JSONObject {
         val discoveryDef = JSONObject()
-        if (configuration.mqttLegacyDiscoveryEntities) {
-            discoveryDef.put("name", "${configuration.mqttDiscoveryDeviceName} ${displayName}")
-        } else {
-            discoveryDef.put("name", displayName)
-        }
+        addNameDiscovery(discoveryDef, displayName)
         addOriginDiscovery(discoveryDef)
 
         discoveryDef.put("state_topic", "${configuration.mqttBaseTopic}${stateTopic}")
@@ -859,19 +873,17 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         return discoveryDef
     }
 
-    private fun getBinarySensorDiscoveryDef(displayName: String, stateTopic: String, fieldName: String, deviceClass: String, sensorId: String): JSONObject {
+    private fun getBinarySensorDiscoveryDef(displayName: String, stateTopic: String, fieldName: String, deviceClass: String?, sensorId: String): JSONObject {
         val discoveryDef = JSONObject()
-        if (configuration.mqttLegacyDiscoveryEntities) {
-            discoveryDef.put("name", "${configuration.mqttDiscoveryDeviceName} ${displayName}")
-        } else {
-            discoveryDef.put("name", displayName)
-        }
+        addNameDiscovery(discoveryDef, displayName)
         addOriginDiscovery(discoveryDef)
         discoveryDef.put("state_topic", "${configuration.mqttBaseTopic}${stateTopic}")
         discoveryDef.put("payload_on", true)
         discoveryDef.put("payload_off", false)
         discoveryDef.put("value_template", "{{ value_json.${fieldName} }}")
-        discoveryDef.put("device_class", deviceClass)
+        if(deviceClass != null) {
+            discoveryDef.put("device_class", deviceClass)
+        }
         discoveryDef.put("unique_id", "wallpanel_${configuration.mqttClientId}_${sensorId}")
         discoveryDef.put("device", getDeviceDiscoveryDef())
         discoveryDef.put("availability_topic", "${configuration.mqttBaseTopic}connection")
@@ -882,15 +894,9 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
     private fun getButtonDiscoveryDef(displayName: String, commandId: String, deviceClass: String? = null): JSONObject
     {
         val discoveryDef = JSONObject()
-        if (configuration.mqttLegacyDiscoveryEntities) {
-            discoveryDef.put("name", "${configuration.mqttDiscoveryDeviceName} ${displayName}")
-        } else {
-            discoveryDef.put("name", displayName)
-        }
+        addNameDiscovery(discoveryDef, displayName)
         addOriginDiscovery(discoveryDef)
-
-        val availability = JSONObject()
-        availability.put("topic", "${configuration.mqttBaseTopic}connection")
+        discoveryDef.put("availability_topic", "${configuration.mqttBaseTopic}connection")
 
         discoveryDef.put("command_topic", "${configuration.mqttBaseTopic}command")
         discoveryDef.put("command_template", "{ \"$commandId\": {{value}} }")
@@ -904,18 +910,12 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         return discoveryDef
     }
 
-    private fun getNumberDiscoveryDef(displayName: String, commandId: String, min: Int, max: Int, deviceClass: String? = null): JSONObject
+    private fun getNumberDiscoveryDef(displayName: String, commandId: String, min: Int, max: Int, deviceClass: String? = null, icon: String? = null): JSONObject
     {
         val discoveryDef = JSONObject()
-        if (configuration.mqttLegacyDiscoveryEntities) {
-            discoveryDef.put("name", "${configuration.mqttDiscoveryDeviceName} ${displayName}")
-        } else {
-            discoveryDef.put("name", displayName)
-        }
+        addNameDiscovery(discoveryDef, displayName)
         addOriginDiscovery(discoveryDef)
-
-        val availability = JSONObject()
-        availability.put("topic", "${configuration.mqttBaseTopic}connection")
+        discoveryDef.put("availability_topic", "${configuration.mqttBaseTopic}connection")
 
         discoveryDef.put("command_topic", "${configuration.mqttBaseTopic}command")
         discoveryDef.put("command_template", "{ \"$commandId\": {{value}} }")
@@ -927,10 +927,40 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         if(deviceClass != null) {
             discoveryDef.put("device_class", deviceClass)
         }
+        if(icon != null) {
+            discoveryDef.put("icon", icon)
+        }
         discoveryDef.put("unique_id", "wallpanel_${configuration.mqttClientId}_${commandId}")
         discoveryDef.put("device", getDeviceDiscoveryDef())
 
         return discoveryDef
+    }
+
+    private fun getTextDiscoveryDef(displayName: String, commandId: String, min: Int, max: Int): JSONObject
+    {
+        val discoveryDef = JSONObject()
+        addNameDiscovery(discoveryDef, displayName)
+        addOriginDiscovery(discoveryDef)
+        discoveryDef.put("availability_topic", "${configuration.mqttBaseTopic}connection")
+
+        discoveryDef.put("command_topic", "${configuration.mqttBaseTopic}command")
+        discoveryDef.put("command_template", "{ \"$commandId\": \"{{ value }}\" }")
+        discoveryDef.put("min", min)
+        discoveryDef.put("max", max)
+        discoveryDef.put("state_topic", "${configuration.mqttBaseTopic}state")
+        discoveryDef.put("value_template", "{{ value_json.currentUrl }}")
+        discoveryDef.put("unique_id", "wallpanel_${configuration.mqttClientId}_${commandId}")
+        discoveryDef.put("device", getDeviceDiscoveryDef())
+
+        return discoveryDef
+    }
+
+    private fun addNameDiscovery(discoveryDef: JSONObject, displayName: String) {
+        if (configuration.mqttLegacyDiscoveryEntities) {
+            discoveryDef.put("name", "${configuration.mqttDiscoveryDeviceName} ${displayName}")
+        } else {
+            discoveryDef.put("name", displayName)
+        }
     }
 
     private fun addOriginDiscovery(discoveryDef: JSONObject) {
@@ -951,7 +981,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
 
 
     private fun publishDiscovery() {
-        if (configuration.sensorsEnabled) {
+        if(configuration.sensorsEnabled && configuration.batterySensorsEnabled) {
             val batteryDiscovery = getSensorDiscoveryDef(getString(R.string.mqtt_sensor_battery_level), "sensor/battery", "battery", "%", "battery")
             publishMessage("${configuration.mqttDiscoveryTopic}/sensor/${configuration.mqttClientId}/battery/config", batteryDiscovery.toString(), true)
             val usbPluggedDiscovery = getBinarySensorDiscoveryDef(getString(R.string.mqtt_sensor_usb_plugged), "sensor/battery", "usbPlugged", "power", "usbPlugged")
@@ -960,23 +990,35 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
             publishMessage("${configuration.mqttDiscoveryTopic}/binary_sensor/${configuration.mqttClientId}/acPlugged/config", acPluggedDiscovery.toString(), true)
             val chargeDiscovery = getBinarySensorDiscoveryDef(getString(R.string.mqtt_sensor_charging), "sensor/battery", "charging", "battery_charging", "charging")
             publishMessage("${configuration.mqttDiscoveryTopic}/binary_sensor/${configuration.mqttClientId}/charging/config", chargeDiscovery.toString(), true)
-            val sensors = sensorReader.getSensors()
-            for (sensor in sensors) {
-                if (sensor.sensorType != null) {
-                    val sensorDiscoveryDef = getSensorDiscoveryDef(sensor.displayName!!, "sensor/${sensor.sensorType!!}", sensor.deviceClass, sensor.unit, sensor.sensorType!!)
-                    publishMessage("${configuration.mqttDiscoveryTopic}/sensor/${configuration.mqttClientId}/${sensor.sensorType!!}/config", sensorDiscoveryDef.toString(), true)
-                }
-            }
-
-        } else {
+        }
+        else
+        {
             publishMessage("${configuration.mqttDiscoveryTopic}/sensor/${configuration.mqttClientId}/battery/config", "", false)
             publishMessage("${configuration.mqttDiscoveryTopic}/binary_sensor/${configuration.mqttClientId}/usbPlugged/config", "", false)
             publishMessage("${configuration.mqttDiscoveryTopic}/binary_sensor/${configuration.mqttClientId}/acPlugged/config", "", false)
             publishMessage("${configuration.mqttDiscoveryTopic}/binary_sensor/${configuration.mqttClientId}/charging/config", "", false)
+        }
+
+        if (configuration.sensorsEnabled) {
+            val screenDiscovery = getBinarySensorDiscoveryDef("Screen", "state", "screenOn", null, "screen")
+            publishMessage("${configuration.mqttDiscoveryTopic}/binary_sensor/${configuration.mqttClientId}/screen/config", screenDiscovery.toString(), true)
+            val screenSaverDiscovery = getBinarySensorDiscoveryDef("Screen Saver", "state", "screenSaver", null, "screenSaver")
+            publishMessage("${configuration.mqttDiscoveryTopic}/binary_sensor/${configuration.mqttClientId}/screenSaver/config", screenSaverDiscovery.toString(), true)
             val sensors = sensorReader.getSensors()
             for (sensor in sensors) {
                 if (sensor.sensorType != null) {
-                    publishMessage("${configuration.mqttDiscoveryTopic}/sensor/${configuration.mqttClientId}/${sensor.sensorType!!}/config", "", false)
+                    val sensorDiscoveryDef = getSensorDiscoveryDef(sensor.displayName!!, "sensor/${sensor.sensorType}", sensor.deviceClass, sensor.unit, sensor.sensorType!!)
+                    publishMessage("${configuration.mqttDiscoveryTopic}/sensor/${configuration.mqttClientId}/${sensor.sensorType}/config", sensorDiscoveryDef.toString(), true)
+                }
+            }
+
+        } else {
+            publishMessage("${configuration.mqttDiscoveryTopic}/binary_sensor/${configuration.mqttClientId}/screen/config", "", false)
+            publishMessage("${configuration.mqttDiscoveryTopic}/binary_sensor/${configuration.mqttClientId}/screenSaver/config", "", false)
+            val sensors = sensorReader.getSensors()
+            for (sensor in sensors) {
+                if (sensor.sensorType != null) {
+                    publishMessage("${configuration.mqttDiscoveryTopic}/sensor/${configuration.mqttClientId}/${sensor.sensorType}/config", "", false)
                 }
             }
         }
@@ -1014,18 +1056,22 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         publishBasicCommandDiscovery("Navigate Home", COMMAND_RELAUNCH)
         publishBasicCommandDiscovery("Refresh Page", COMMAND_RELOAD)
         publishBasicCommandDiscovery("Open Settings", COMMAND_SETTINGS)
+        publishBasicCommandDiscovery("Wake Screen", COMMAND_WAKE)
 
         // TODO: Switches for things that can be toggled, e.g. camera
 
         // Numbers for values that can be adjusted
         if(configuration.useScreenBrightness) {
-            publishBasicNumberDiscovery("Screen Brightness", COMMAND_BRIGHTNESS, 1, 255)
+            publishBasicNumberDiscovery("Screen Brightness", COMMAND_BRIGHTNESS, 1, 255, icon="mdi:brightness-5")
         } else {
             publishMessage("${configuration.mqttDiscoveryTopic}/number/${configuration.mqttClientId}/$COMMAND_BRIGHTNESS/config", "", false)
         }
 
         // Volume of player can't be read
         // publishBasicNumberDiscovery("Volume", COMMAND_VOLUME, 0, 100)
+
+        // URL text
+        publishTextDiscovery("Current URL", COMMAND_URL, 1, 255)
 
     }
 
@@ -1037,18 +1083,26 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         )
     }
 
-    private fun publishBasicNumberDiscovery(displayName: String, commandId: String, min: Int, max: Int, deviceClass: String? = null) {
+    private fun publishTextDiscovery(displayName: String, commandId: String, min: Int, max: Int) {
+        publishMessage(
+            "${configuration.mqttDiscoveryTopic}/text/${configuration.mqttClientId}/${commandId}/config",
+            getTextDiscoveryDef(displayName, commandId, min, max).toString(),
+            true
+        )
+    }
+
+    private fun publishBasicNumberDiscovery(displayName: String, commandId: String, min: Int, max: Int, deviceClass: String? = null, icon: String? = null) {
         publishMessage(
             "${configuration.mqttDiscoveryTopic}/number/${configuration.mqttClientId}/${commandId}/config",
-            getNumberDiscoveryDef(displayName, commandId, min, max, deviceClass).toString(),
+            getNumberDiscoveryDef(displayName, commandId, min, max, deviceClass, icon).toString(),
             true
         )
     }
 
 
-    private fun clearMotionDetected() {
-        Timber.d("Clearing motion detected status")
-        if (motionDetected) {
+    private fun clearMotionDetected(force: Boolean = false) {
+        if (motionDetected || force) {
+            Timber.d("Clearing motion detected status")
             motionDetected = false
             val data = JSONObject()
             try {
@@ -1060,18 +1114,8 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         }
     }
 
-    private fun clearFaceDetected() {
-        if (faceDetected) {
-            Timber.d("Clearing face detected status")
-            val data = JSONObject()
-            try {
-                data.put(VALUE, false)
-            } catch (ex: JSONException) {
-                ex.printStackTrace()
-            }
-            faceDetected = false
-            publishCommand(MqttUtils.COMMAND_SENSOR_FACE, data)
-        }
+    private val qrCodeClearRunnable = Runnable {
+        qrCodeRead = false
     }
 
     private fun publishQrCode(data: String) {
@@ -1086,14 +1130,10 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
             qrCodeRead = true
             sendToastMessage(getString(R.string.toast_qr_code_read))
             publishCommand(COMMAND_SENSOR_QR_CODE, jdata)
-            qrCodeClearHandler.postDelayed({ clearQrCodeRead() }, 5000)
         }
-    }
 
-    private fun clearQrCodeRead() {
-        if (qrCodeRead) {
-            qrCodeRead = false
-        }
+        handler.removeCallbacks(qrCodeClearRunnable)
+        handler.postDelayed(qrCodeClearRunnable, 5000)
     }
 
     private fun sendAlertMessage(message: String) {
@@ -1161,10 +1201,10 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
                     intent.action == Intent.ACTION_USER_PRESENT) {
                 Timber.i("Screen state changed")
                 publishApplicationState()
-            } else if (BROADCAST_EVENT_SCREEN_TOUCH == intent.action) {
-                Timber.i("Screen touched")
-                //TODO: This overrides URL Change. Do we really need this?
-                //publishApplicationState()
+            } else if (BROADCAST_EVENT_SCREENSAVER_CHANGE == intent.action) {
+                isScreenSaverActive = intent.getBooleanExtra("active", false)
+                Timber.i("Screen saver: $isScreenSaverActive")
+                publishApplicationState()
             }
         }
     }
@@ -1200,6 +1240,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
             // Timber.i("Too dark for motion detection")
         }
 
+
         override fun onFaceDetected() {
             Timber.i("Face detected")
             Timber.d("configuration.cameraMotionBright ${configuration.cameraMotionBright}")
@@ -1219,7 +1260,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
     companion object {
         const val ONGOING_NOTIFICATION_ID = 1
         const val BROADCAST_EVENT_URL_CHANGE = "BROADCAST_EVENT_URL_CHANGE"
-        const val BROADCAST_EVENT_SCREEN_TOUCH = "BROADCAST_EVENT_SCREEN_TOUCH"
+        const val BROADCAST_EVENT_SCREENSAVER_CHANGE = "BROADCAST_EVENT_SCREENSAVER_CHANGE"
         const val SCREEN_WAKE_TIME = 30000L
         const val BROADCAST_ALERT_MESSAGE = "BROADCAST_ALERT_MESSAGE"
         const val BROADCAST_CLEAR_ALERT_MESSAGE = "BROADCAST_CLEAR_ALERT_MESSAGE"

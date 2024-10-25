@@ -43,9 +43,8 @@
             android:textColor="@color/light_gray"
             android:textSize="12sp"/>
 
-        <Preference
+        <SwitchPreference
             android:key="@string/key_setting_battery"
-            android:selectable="false"
             android:summary="@string/pref_summary_battery"
             android:title="@string/pref_title_battery"
             android:dependency="@string/key_setting_sensors_enabled"/>

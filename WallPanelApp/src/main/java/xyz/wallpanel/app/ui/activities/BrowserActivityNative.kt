@@ -347,7 +347,7 @@ class BrowserActivityNative : BaseBrowserActivity(), LifecycleObserver, WebClien
         webView.setOnTouchListener { v, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    resetScreen()
+                    resetInactivityTimer() // Needed?
                     if (!v.hasFocus()) {
                         v.requestFocus()
                     }
