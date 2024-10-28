@@ -17,6 +17,7 @@
 package xyz.wallpanel.app.ui.activities
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -25,6 +26,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.DisplayMetrics
 import android.view.View
 import android.view.ViewTreeObserver
 import android.view.WindowManager
@@ -49,6 +51,7 @@ import xyz.wallpanel.app.network.WallPanelService.Companion.BROADCAST_TOAST_MESS
 import xyz.wallpanel.app.persistence.Configuration
 import xyz.wallpanel.app.utils.DialogUtils
 import xyz.wallpanel.app.utils.ScreenUtils
+import java.security.AccessController.getContext
 import javax.inject.Inject
 
 
@@ -69,7 +72,7 @@ abstract class BaseBrowserActivity : DaggerAppCompatActivity() {
     var mOnScrollChangedListener: ViewTreeObserver.OnScrollChangedListener? = null
     var wallPanelService: Intent? = null
     private var decorView: View? = null
-    private val inactivityHandler: Handler = Handler(Looper.getMainLooper())
+    private val handler: Handler = Handler(Looper.getMainLooper())
     private var userPresent: Boolean = false
     private var keepScreenOn = false
     var displayProgress = true
@@ -130,17 +133,28 @@ abstract class BaseBrowserActivity : DaggerAppCompatActivity() {
             } else if (BROADCAST_SERVICE_STARTED == intent.action && !isFinishing) {
                 //firstLoadUrl() // load the url after service started
             } else if (BROADCAST_SYSTEM_SHUTDOWN == intent.action) {
-                val proc =
-                    Runtime.getRuntime().exec(arrayOf("su", "0", "/system/bin/svc", "power", "shutdown"))
-                val output = proc.inputStream.bufferedReader().use { it.readText() }
+                var metrics = DisplayMetrics()
+                window.windowManager.defaultDisplay.getMetrics(metrics)
+
+                // Long Press the power button down
+                val proc = Runtime.getRuntime().exec(arrayOf("su", "0", "input", "keyevent", "--longpress", "26"))
                 proc.waitFor()
+
+                handler.postDelayed(Runnable {
+                    // Tap on the shutdown button on screen...
+                    val proc2 = Runtime.getRuntime().exec(arrayOf("su", "0", "input", "tap", "${metrics.widthPixels/2}", "20"))
+                    proc2.waitFor()
+                    Timber.d("System shutdown")
+                }, 2000)
+
+                //val output = proc.inputStream.bufferedReader().use { it.readText() }
+                //proc.waitFor()
 
                 //var x = getSystemService(Context.POWER_SERVICE) as PowerManager;
                 //x.reboot("System shutdown request")
 
                 //startActivity(Intent("android.intent.action.ACTION_REQUEST_SHUTDOWN"));
 
-                Timber.d("System shutdown ${proc.exitValue()}: $output")
             }
 
         }
@@ -221,7 +235,7 @@ abstract class BaseBrowserActivity : DaggerAppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        inactivityHandler.removeCallbacks(inactivityCallback)
+        handler.removeCallbacks(inactivityCallback)
         window.clearFlags(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED)
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
@@ -285,9 +299,9 @@ abstract class BaseBrowserActivity : DaggerAppCompatActivity() {
     protected fun resetInactivityTimer() {
         userPresent = true
         hideScreenSaver()
-        inactivityHandler.removeCallbacks(inactivityCallback)
+        handler.removeCallbacks(inactivityCallback)
         if(!keepScreenOn) {
-            inactivityHandler.postDelayed(inactivityCallback, configuration.inactivityTime)
+            handler.postDelayed(inactivityCallback, configuration.inactivityTime)
         }
     }
 
@@ -318,7 +332,7 @@ abstract class BaseBrowserActivity : DaggerAppCompatActivity() {
                     || configuration.hasDimScreenSaver)
             && !isFinishing
         ) {
-            inactivityHandler.removeCallbacks(inactivityCallback)
+            handler.removeCallbacks(inactivityCallback)
             if(!configuration.hasDimScreenSaver) {
                 dialogUtils.showScreenSaver(
                     this@BaseBrowserActivity,
