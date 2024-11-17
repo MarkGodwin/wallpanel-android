@@ -133,7 +133,7 @@ abstract class BaseBrowserActivity : DaggerAppCompatActivity() {
             } else if (BROADCAST_SERVICE_STARTED == intent.action && !isFinishing) {
                 //firstLoadUrl() // load the url after service started
             } else if (BROADCAST_SYSTEM_SHUTDOWN == intent.action) {
-                var metrics = DisplayMetrics()
+                val metrics = DisplayMetrics()
                 window.windowManager.defaultDisplay.getMetrics(metrics)
 
                 // Long Press the power button down
@@ -146,14 +146,6 @@ abstract class BaseBrowserActivity : DaggerAppCompatActivity() {
                     proc2.waitFor()
                     Timber.d("System shutdown")
                 }, 2000)
-
-                //val output = proc.inputStream.bufferedReader().use { it.readText() }
-                //proc.waitFor()
-
-                //var x = getSystemService(Context.POWER_SERVICE) as PowerManager;
-                //x.reboot("System shutdown request")
-
-                //startActivity(Intent("android.intent.action.ACTION_REQUEST_SHUTDOWN"));
 
             }
 
@@ -207,6 +199,9 @@ abstract class BaseBrowserActivity : DaggerAppCompatActivity() {
         super.onPause()
         val bm = LocalBroadcastManager.getInstance(this)
         bm.unregisterReceiver(mBroadcastReceiver)
+        userPresent = false
+        handler.removeCallbacks(inactivityCallback)
+
     }
 
     override fun onStart() {
@@ -243,10 +238,7 @@ abstract class BaseBrowserActivity : DaggerAppCompatActivity() {
     override fun onUserInteraction() {
         onWindowFocusChanged(true)
         Timber.d("onUserInteraction")
-        userPresent = true
-        if (keepScreenOn.not()) {
-            resetInactivityTimer()
-        }
+        resetInactivityTimer()
     }
 
     fun setDarkTheme() {
@@ -297,6 +289,11 @@ abstract class BaseBrowserActivity : DaggerAppCompatActivity() {
     }
 
     protected fun resetInactivityTimer() {
+        if(!userPresent) {
+            val intent = Intent(WallPanelService.BROADCAST_EVENT_USER_INTERACTION)
+            val bm = LocalBroadcastManager.getInstance(applicationContext)
+            bm.sendBroadcast(intent)
+        }
         userPresent = true
         hideScreenSaver()
         handler.removeCallbacks(inactivityCallback)

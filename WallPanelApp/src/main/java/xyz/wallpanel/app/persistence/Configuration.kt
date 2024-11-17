@@ -33,6 +33,10 @@ constructor(private val context: Context, private val sharedPreferences: SharedP
         get() = getBoolPref(R.string.key_setting_app_preventsleep,
                 R.string.default_setting_app_preventsleep)
 
+    var keepCpuAwake: Boolean
+        get() = this.sharedPreferences.getBoolean(PREF_SETTINGS_KEEP_CPU_AWAKE, false)
+        set(value) = this.sharedPreferences.edit().putBoolean(PREF_SETTINGS_KEEP_CPU_AWAKE, value).apply()
+
     // TODO we have to migrate this due to an error when entering codes with leading 0 value
     var settingsCode: String
         get() {
@@ -407,6 +411,7 @@ constructor(private val context: Context, private val sharedPreferences: SharedP
         private const val PREF_BROWSER_SETTINGS_UPDATED = "pref_browser_settings_updated"
         private const val PREF_DARK_THEME = "pref_dark_theme"
         private const val PREF_FULL_SCREEN = "pref_full_screen"
+        private const val PREF_SETTINGS_KEEP_CPU_AWAKE = "pref_settings_keep_cpu_awake"
         private const val PREF_SETTINGS_CODE = "pref_settings_code"
         private const val PREF_SETTINGS_CODE_STRING = "pref_settings_code_string"
         private const val PREF_SETTINGS_TRANSPARENT = "pref_settings_transparent"

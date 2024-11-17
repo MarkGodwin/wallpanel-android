@@ -42,6 +42,7 @@
     <string name="title_activity_browser">Browser</string>
     <string name="title_setting_app_deviceid">Device ID</string>
     <string name="title_setting_app_preventsleep">Prevent Screen Sleep</string>
+    <string name="title_pref_settings_keep_cpu_awake">Keep CPU Awake</string>
     <string name="title_setting_app_launchurl">Dashboard URL</string>
     <string name="title_setting_app_showactivity">Show Browser Activity</string>
     <string name="title_setting_camera_enabled">Camera Enabled</string>
@@ -141,7 +142,8 @@
     <string name="pref_http_description">Control the application over HTTP using REST API calls. To find out which commands work with, review the help documentation.</string>
     <string name="pref_launchurl_summary">Enter the fully qualified URL for your home automation dashboard or path to file on the local device (requires storage access permission).</string>
     <string name="pref_show_browser_activity_summary">Display browser loading progress.</string>
-    <string name="pref_prevent_sleep_summary">When active, keeps the screen on.</string>
+    <string name="pref_prevent_sleep_summary">When enabled, keeps the screen on.</string>
+    <string name="pref_settings_keep_cpu_awake_summary">When enabled, keeps the system awake, even if the screen is off. Keeps MQTT Connected.</string>
     <string name="pref_start_boot_summary">Will start the application upon system boot.</string>
     <string name="pref_zoom_level_summary">Zooms the browser level (experimental).</string>
     <string name="pref_additional_settings_title">Additional Settings</string>

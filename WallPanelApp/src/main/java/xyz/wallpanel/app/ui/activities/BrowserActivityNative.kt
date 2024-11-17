@@ -93,7 +93,7 @@ class BrowserActivityNative : BaseBrowserActivity(), LifecycleObserver, WebClien
 
         super.onCreate(savedInstanceState)
 
-        if (BuildConfig.DEBUG) {
+        /*if (BuildConfig.DEBUG) {
             configuration.mqttBroker = BuildConfig.BROKER
             configuration.mqttUsername = BuildConfig.BROKER_USERNAME
             configuration.mqttPassword = BuildConfig.BROKER_PASS
@@ -101,7 +101,7 @@ class BrowserActivityNative : BaseBrowserActivity(), LifecycleObserver, WebClien
             configuration.hasCode = false
             configuration.settingsCode = BuildConfig.CODE.toString()
             configuration.hasClockScreenSaver = true
-        }
+        }*/
 
         binding = ActivityBrowserBinding.inflate(layoutInflater)
         try {

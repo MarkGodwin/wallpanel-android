@@ -88,6 +88,8 @@ import javax.inject.Inject
 // TODO move this to internal class within application, no longer run as service
 class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
 
+    private var lastPublishedState: JSONObject = JSONObject()
+
     @Inject
     lateinit var configuration: Configuration
 
@@ -103,7 +105,8 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
     lateinit var screenUtils: ScreenUtils
 
     private val mJpegSockets = ArrayList<AsyncHttpServerResponse>()
-    private var partialWakeLock: PowerManager.WakeLock? = null
+    private var screenWakeLock: PowerManager.WakeLock? = null
+    private var cpuWakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
     private var keyguardLock: KeyguardManager.KeyguardLock? = null
     private var audioPlayer: MediaPlayer? = null
@@ -138,6 +141,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
             get() = this@WallPanelService
     }
 
+    @SuppressLint("WakelockTimeout")
     override fun onCreate() {
         super.onCreate()
 
@@ -150,11 +154,11 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         // prepare the lock types we may use
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
 
-        //noinspection deprecation
-        partialWakeLock = if (Build.VERSION.SDK_INT > Build.VERSION_CODES.KITKAT) {
-            pm.newWakeLock(PowerManager.FULL_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP, "wallPanel:partialWakeLock")
-        } else {
-            pm.newWakeLock(PowerManager.FULL_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP or PowerManager.ON_AFTER_RELEASE, "wallPanel:partialWakeLock")
+        screenWakeLock = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP, "wallPanel:screenWakeLock")
+
+        if(configuration.keepCpuAwake) {
+            cpuWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "wallPanel:cpuWakeLock")
+            cpuWakeLock?.acquire()
         }
 
         // wifi lock
@@ -173,7 +177,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         this.appLaunchUrl = configuration.appLaunchUrl
 
         configureMqtt()
-        configurePowerOptions()
+        wakeDevice()
         configureCamera()
         startHttp()
         configureAudioPlayer()
@@ -183,6 +187,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         val filter = IntentFilter()
         filter.addAction(BROADCAST_EVENT_URL_CHANGE)
         filter.addAction(BROADCAST_EVENT_SCREENSAVER_CHANGE)
+        filter.addAction(BROADCAST_EVENT_USER_INTERACTION)
         filter.addAction(Intent.ACTION_SCREEN_ON)
         filter.addAction(Intent.ACTION_SCREEN_OFF)
         filter.addAction(Intent.ACTION_USER_PRESENT)
@@ -192,6 +197,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
 
     override fun onDestroy() {
         super.onDestroy()
+
         mqttModule?.let {
             it.pause()
             mqttModule = null
@@ -283,9 +289,9 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         return hasNetwork.get()
     }
 
-    private fun configurePowerOptions() {
-        if (partialWakeLock != null && !partialWakeLock!!.isHeld) {
-            partialWakeLock!!.acquire(3000)
+    private fun wakeDevice() {
+        if (screenWakeLock != null && !screenWakeLock!!.isHeld) {
+            screenWakeLock!!.acquire(3000)
         }
         if (!wifiLock!!.isHeld) {
             wifiLock!!.acquire()
@@ -299,9 +305,10 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
     }
 
     private fun stopPowerOptions() {
-        Timber.i("Releasing Screen/WiFi Locks")
-        if (partialWakeLock != null && partialWakeLock!!.isHeld) {
-            partialWakeLock!!.release()
+        Timber.i("Releasing Cpu/Screen/WiFi Locks")
+        cpuWakeLock?.release()
+        if (screenWakeLock != null && screenWakeLock!!.isHeld) {
+            screenWakeLock!!.release()
         }
         if (wifiLock != null && wifiLock!!.isHeld) {
             wifiLock!!.release()
@@ -578,6 +585,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
     private fun processCommand(commandJson: JSONObject): Boolean {
         Timber.d("processCommand $commandJson")
         try {
+
             if (commandJson.has(COMMAND_CAMERA)) {
                 val enableCamera = commandJson.getBoolean(COMMAND_CAMERA)
                 if (!enableCamera) {
@@ -600,7 +608,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
                     if(wakeTime > 0) {
                         wakeScreenOn(wakeTime)
                     } else {
-                        wakeScreen(true)
+                        setScreenOn(true)
                     }
                 } else {
                     wakeScreenOff()
@@ -647,7 +655,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
                 }
             }
             if(commandJson.has(COMMAND_SCREEN)) {
-                wakeScreen(commandJson.getBoolean(COMMAND_SCREEN))
+                setScreenOn(commandJson.getBoolean(COMMAND_SCREEN))
             }
         } catch (ex: JSONException) {
             Timber.e("Invalid JSON passed as a command: " + commandJson.toString())
@@ -669,6 +677,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
 
     private fun browseUrl(url: String) {
         Timber.d("browseUrl")
+        wakeDevice();
         val intent = Intent(BROADCAST_ACTION_LOAD_URL)
         intent.putExtra(BROADCAST_ACTION_LOAD_URL, url)
         val bm = LocalBroadcastManager.getInstance(applicationContext)
@@ -709,15 +718,15 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         }
     }
 
-    private fun wakeScreen(turnOn: Boolean) {
+    private fun setScreenOn(turnOn: Boolean) {
 
         if(configuration.screenControlEnabled && !turnOn && isScreenOn) {
             // Short press the power button to turn off the screen
             val proc = Runtime.getRuntime().exec(arrayOf("su", "0", "input", "keyevent", "26"))
             proc.waitFor()
         }
-        else {
-            configurePowerOptions()
+        else if(turnOn) {
+            wakeDevice()
 
             val intent = Intent(BROADCAST_SCREEN_WAKE)
             val bm = LocalBroadcastManager.getInstance(applicationContext)
@@ -729,19 +738,17 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
 
     private fun startShutdown()
     {
+        wakeDevice();
         val intent = Intent(BROADCAST_SYSTEM_SHUTDOWN)
         val bm = LocalBroadcastManager.getInstance(applicationContext)
         bm.sendBroadcast(intent)
     }
 
-    @SuppressLint("WakelockTimeout")
     private fun wakeScreenOn(wakeTime: Long) {
-        if (partialWakeLock != null && !partialWakeLock!!.isHeld) {
-            partialWakeLock?.acquire(wakeTime)
-            handler.removeCallbacks(clearWakeScreenRunnable)
-            handler.postDelayed(clearWakeScreenRunnable, wakeTime)
-            sendWakeScreenOn()
-        }
+        wakeDevice()
+        handler.removeCallbacks(clearWakeScreenRunnable)
+        handler.postDelayed(clearWakeScreenRunnable, wakeTime)
+        sendWakeScreenOn()
     }
 
     private val clearWakeScreenRunnable = Runnable {
@@ -750,20 +757,19 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
 
     private fun wakeScreenOff() {
         handler.removeCallbacks(clearWakeScreenRunnable)
-        if (partialWakeLock != null && partialWakeLock!!.isHeld) {
-            partialWakeLock!!.release()
-        }
         sendWakeScreenOff()
     }
 
     private fun changeScreenBrightness(brightness: Int) {
         if (configuration.screenBrightness != brightness && configuration.useScreenBrightness) {
+            wakeDevice();
             screenUtils.updateScreenBrightness(brightness)
             sendScreenBrightnessChange()
         }
     }
 
     private fun evalJavascript(js: String) {
+        wakeDevice();
         val intent = Intent(BROADCAST_ACTION_JS_EXEC)
         intent.putExtra(BROADCAST_ACTION_JS_EXEC, js)
         val bm = LocalBroadcastManager.getInstance(applicationContext)
@@ -771,24 +777,28 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
     }
 
     private fun reloadPage() {
+        wakeDevice();
         val intent = Intent(BROADCAST_ACTION_RELOAD_PAGE)
         val bm = LocalBroadcastManager.getInstance(applicationContext)
         bm.sendBroadcast(intent)
     }
 
     private fun forceWebViewCrash() {
+        wakeDevice();
         val intent = Intent(BROADCAST_ACTION_FORCE_WEBVIEW_CRASH)
         val bm = LocalBroadcastManager.getInstance(applicationContext)
         bm.sendBroadcast(intent)
     }
 
     private fun openSettings() {
+        wakeDevice();
         val intent = Intent(BROADCAST_ACTION_OPEN_SETTINGS)
         val bm = LocalBroadcastManager.getInstance(applicationContext)
         bm.sendBroadcast(intent)
     }
 
     private fun clearBrowserCache() {
+        wakeDevice();
         val intent = Intent(BROADCAST_ACTION_CLEAR_BROWSER_CACHE)
         val bm = LocalBroadcastManager.getInstance(applicationContext)
         bm.sendBroadcast(intent)
@@ -816,7 +826,11 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
     }
 
     private val appStateRunnable = Runnable {
-        publishCommand(COMMAND_STATE, state)
+        val newState = state
+        if(newState.toString() != lastPublishedState.toString()) {
+            lastPublishedState = newState
+            publishCommand(COMMAND_STATE, newState)
+        }
     }
 
     private fun publishApplicationState(delay: Int = 500) {
@@ -1265,6 +1279,9 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
                 isScreenSaverActive = intent.getBooleanExtra("active", false)
                 Timber.i("Screen saver: $isScreenSaverActive")
                 publishApplicationState()
+            } else if(BROADCAST_EVENT_USER_INTERACTION == intent.action) {
+                Timber.i("User interaction!")
+                publishApplicationState()
             }
         }
     }
@@ -1290,7 +1307,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         override fun onMotionDetected() {
             Timber.i("Motion detected")
             if (configuration.cameraMotionWake) {
-                wakeScreen(true)
+                setScreenOn(true)
             }
             publishMotionDetected()
         }
@@ -1304,7 +1321,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
             Timber.i("Face detected")
             Timber.d("configuration.cameraMotionBright ${configuration.cameraMotionBright}")
             if (configuration.cameraFaceWake) {
-                wakeScreen(true)
+                setScreenOn(true)
             }
             publishFaceDetected()
         }
@@ -1319,6 +1336,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         const val ONGOING_NOTIFICATION_ID = 1
         const val BROADCAST_EVENT_URL_CHANGE = "BROADCAST_EVENT_URL_CHANGE"
         const val BROADCAST_EVENT_SCREENSAVER_CHANGE = "BROADCAST_EVENT_SCREENSAVER_CHANGE"
+        const val BROADCAST_EVENT_USER_INTERACTION = "BROADCAST_EVENT_USER_INTERACTION"
         const val SCREEN_WAKE_TIME = 30000L
         const val BROADCAST_ALERT_MESSAGE = "BROADCAST_ALERT_MESSAGE"
         const val BROADCAST_CLEAR_ALERT_MESSAGE = "BROADCAST_CLEAR_ALERT_MESSAGE"
