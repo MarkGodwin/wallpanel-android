@@ -27,10 +27,12 @@ import android.hardware.SensorManager
 import android.os.BatteryManager
 import android.os.Handler
 import android.os.Looper
+import dagger.android.AndroidInjection
 import xyz.wallpanel.app.R
 import org.json.JSONException
 import org.json.JSONObject
 import timber.log.Timber
+import xyz.wallpanel.app.persistence.Configuration
 import java.util.*
 import javax.inject.Inject
 
@@ -66,34 +68,42 @@ constructor(private val context: Context){
             if (getSensorName(s.type) != null)
                 mSensorList.add(s)
         }
+
     }
 
     fun getSensors(): List<SensorInfo> {
         return mSensorList.map { s -> SensorInfo(getSensorName(s.type), getSensorUnit(s.type), getSensorDeviceClass(s.type), getSensorDisplayName(s.type)) }
     }
 
-    fun startReadings(freqSeconds: Int, callback: SensorCallback) {
+    fun startReadings(freqSeconds: Int, callback: SensorCallback, configuration: Configuration) {
         Timber.d("startReadings")
         this.callback = callback
         if (freqSeconds >= 0) {
-            updateFrequencyMilliSeconds = 1000 * freqSeconds
-            batteryHandler.removeCallbacksAndMessages(null)
-            batteryHandler.postDelayed(batteryHandlerRunnable, updateFrequencyMilliSeconds.toLong())
+            if(configuration.batterySensorsEnabled) {
+                updateFrequencyMilliSeconds = 1000 * freqSeconds
+                batteryHandler.removeCallbacksAndMessages(null)
+                batteryHandler.postDelayed(
+                    batteryHandlerRunnable,
+                    updateFrequencyMilliSeconds.toLong()
+                )
+            }
             startSensorReadings()
         }
     }
 
     fun refreshSensors() {
-        batteryHandler.removeCallbacksAndMessages(null)
-        batteryHandler.post(batteryHandlerRunnable)
+        if(updateFrequencyMilliSeconds > 0) {
+            batteryHandler.removeCallbacksAndMessages(null)
+            batteryHandler.post(batteryHandlerRunnable)
+        }
         stopSensorReading()
         startSensorReadings()
     }
 
     fun stopReadings() {
         Timber.d("stopReadings")
-        batteryHandler.removeCallbacksAndMessages(null)
         updateFrequencyMilliSeconds = 0
+        batteryHandler.removeCallbacksAndMessages(null)
         stopSensorReading()
     }
 
@@ -197,7 +207,6 @@ constructor(private val context: Context){
         }
     }
 
-    // TODO let's move this to its own setting
     private fun getBatteryReading() {
         Timber.d("getBatteryReading")
         val intentFilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)

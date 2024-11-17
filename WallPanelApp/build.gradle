@@ -28,7 +28,7 @@ plugins {
 
 def versionMajor = 1
 def versionMinor = 1
-def versionPatch = 6
+def versionPatch = 7
 def versionBuild = 0 // bump for dog food builds, public betas, etc.
 
 def CODE() {
@@ -62,6 +62,7 @@ def BROKER_USERNAME() {
 }
 
 android {
+
     kapt {
         generateStubs = true
         correctErrorTypes = true

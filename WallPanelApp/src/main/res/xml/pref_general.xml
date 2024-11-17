@@ -104,12 +104,21 @@
             android:title="Clear Home Screen"
             android:summary="Removes the app as the default Home screen (Important!! use this is you want to reset your device home app)."
             android:key="button_reset_home_app"/>
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="Rooted device features">
 
         <SwitchPreference
             android:defaultValue="false"
             android:title="Enable Shutdown Command"
-            android:summary="Enables the ability to shut the device down remotely via the command API. Won't work with most devices."
+            android:summary="Enables the ability to shut the device down remotely via the command API/MQTT."
             android:key="pref_shutdown_enabled"/>
+
+        <SwitchPreference
+            android:defaultValue="false"
+            android:title="Enable Screen On/Off Command"
+            android:summary="Enables the ability to turn the screen on and off via the command API/MQTT."
+            android:key="pref_screen_control_enabled"/>
 
     </PreferenceCategory>
 
