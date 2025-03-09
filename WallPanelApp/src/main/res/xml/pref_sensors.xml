@@ -14,7 +14,8 @@
   ~ limitations under the License.
   -->
 
-<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <PreferenceCategory android:title="Sensors">
 
@@ -47,6 +48,7 @@
             android:key="@string/key_setting_battery"
             android:summary="@string/pref_summary_battery"
             android:title="@string/pref_title_battery"
+            android:defaultValue="true"
             android:dependency="@string/key_setting_sensors_enabled"/>
 
         <Preference
@@ -56,12 +58,15 @@
             android:title="@string/title_setting_sensors_temperature"
             android:dependency="@string/key_setting_sensors_enabled"/>
 
-        <Preference
+        <SwitchPreference
             android:key="@string/key_settings_sensors_light"
             android:summary="@string/summary_setting_sensors_default"
             android:selectable="false"
+            android:defaultValue="true"
             android:title="@string/title_setting_sensors_light"
-            android:dependency="@string/key_setting_sensors_enabled"/>
+            android:dependency="@string/key_setting_sensors_enabled">
+
+        </SwitchPreference>
 
         <Preference
             android:key="@string/key_settings_sensors_magneticField"
@@ -83,6 +88,43 @@
             android:selectable="false"
             android:title="@string/title_setting_sensors_humidity"
             android:dependency="@string/key_setting_sensors_enabled"/>
+
+        <PreferenceCategory
+            android:key="@string/key_settings_sensors_proximity"
+            android:title="@string/title_setting_sensors_proximity"
+            android:summary="@string/summary_setting_sensors_default">
+
+            <SwitchPreference
+                android:key="@string/key_settings_sensors_proximity_distance_enable"
+                android:summary="@string/summary_setting_sensors_enable"
+                android:title="@string/title_setting_sensors_proximity_distance_enable"
+                android:dependency="@string/key_settings_sensors_proximity"
+                android:defaultValue="true"/>
+
+            <SwitchPreference
+                android:key="@string/key_settings_sensors_proximity_occupancy_enable"
+                android:summary="@string/summary_setting_sensors_enable"
+                android:title="@string/title_setting_sensors_proximity_occupancy_enable"
+                android:dependency="@string/key_settings_sensors_proximity"
+                android:defaultValue="true"/>
+
+            <SeekBarPreference
+                android:key="@string/key_settings_sensors_proximity_occupancy_threshold"
+                android:title="@string/title_setting_sensors_proximity_occupancy_threshold"
+                android:dependency="@string/key_settings_sensors_proximity_occupancy_enable"
+                android:max="50"
+                android:defaultValue="12"
+                app:min="2"
+                app:showSeekBarValue="true" />
+
+            <SwitchPreference
+                android:key="@string/key_settings_sensors_proximity_occupancy_wake_screen"
+                android:title="@string/title_setting_sensors_proximity_occupancy_wake_screen"
+                android:summary="@string/summary_setting_sensors_proximity_occupancy_wake_screen"
+                android:dependency="@string/key_settings_sensors_proximity_occupancy_enable"
+                android:defaultValue="true" />
+
+        </PreferenceCategory>
 
     </PreferenceCategory>
 

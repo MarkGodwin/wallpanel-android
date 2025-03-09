@@ -82,11 +82,19 @@
     <string name="default_setting_android_browsertype">Auto</string>
     <string name="title_setting_test_zoomlevel">Browser Zoom Level</string>
     <string name="summary_setting_sensors_default">Not available</string>
+    <string name="summary_setting_sensors_enable">Allow publishing of this sensor value</string>
+    <string name="summary_setting_sensors_proximity_occupancy_threshold">Maximum detected distance for Occupied state</string>
+    <string name="summary_setting_sensors_proximity_occupancy_wake_screen">Wake the screen when the proximity threshold is reached</string>
     <string name="title_setting_sensors_temperature">Temperature</string>
     <string name="title_setting_sensors_light">Light</string>
     <string name="title_setting_sensors_magneticField">Magnetic Field</string>
     <string name="title_setting_sensors_pressure">Pressure</string>
     <string name="title_setting_sensors_humidity">Humidity</string>
+    <string name="title_setting_sensors_proximity">Proximity</string>
+    <string name="title_setting_sensors_proximity_distance_enable">Enable Distance Sensing</string>
+    <string name="title_setting_sensors_proximity_occupancy_enable">Enable Occupancy Sensing</string>
+    <string name="title_setting_sensors_proximity_occupancy_threshold">Occupancy Distance Threshold</string>
+    <string name="title_setting_sensors_proximity_occupancy_wake_screen">Wake Screen</string>
     <string name="title_setting_ignore_ssl_errors">Ignore SSL Errors</string>
 
     <string name="text_seconds">%1$s seconds</string>
@@ -260,6 +268,8 @@
     <string name="mqtt_sensor_magnetic_field">Magnetic Field</string>
     <string name="mqtt_sensor_pressure">Pressure</string>
     <string name="mqtt_sensor_humidity">Humidity</string>
+    <string name="mqtt_sensor_proximity">Proximity</string>
+    <string name="mqtt_sensor_occupancy">Occupancy</string>
     <string name="mqtt_sensor_face_detected">Face Detected</string>
     <string name="mqtt_sensor_motion_detected">Motion Detected</string>
 

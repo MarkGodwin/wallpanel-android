@@ -289,9 +289,9 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         return hasNetwork.get()
     }
 
-    private fun wakeDevice() {
-        if (screenWakeLock != null && !screenWakeLock!!.isHeld) {
-            screenWakeLock!!.acquire(3000)
+    private fun wakeDevice(timeout: Long = 3000) {
+        if (screenWakeLock != null) {
+            screenWakeLock!!.acquire(timeout)
         }
         if (!wifiLock!!.isHeld) {
             wifiLock!!.acquire()
@@ -322,9 +322,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
     }
 
     private fun startSensors() {
-        if (configuration.sensorsEnabled && mqttOptions.isValid) {
-            sensorReader.startReadings(configuration.mqttSensorFrequency, sensorCallback, configuration)
-        }
+        sensorReader.startReadings(configuration.mqttSensorFrequency, sensorCallback, configuration)
     }
 
     private fun configureMqtt() {
@@ -745,18 +743,22 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
     }
 
     private fun wakeScreenOn(wakeTime: Long) {
-        wakeDevice()
+        wakeDevice(wakeTime)
         handler.removeCallbacks(clearWakeScreenRunnable)
         handler.postDelayed(clearWakeScreenRunnable, wakeTime)
         sendWakeScreenOn()
     }
 
     private val clearWakeScreenRunnable = Runnable {
-        wakeScreenOff()
+        sendWakeScreenOff()
     }
 
     private fun wakeScreenOff() {
         handler.removeCallbacks(clearWakeScreenRunnable)
+
+        if (screenWakeLock != null && screenWakeLock!!.isHeld) {
+            screenWakeLock!!.release()
+        }
         sendWakeScreenOff()
     }
 
@@ -1058,22 +1060,54 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
             publishMessage("${configuration.mqttDiscoveryTopic}/binary_sensor/${configuration.mqttClientId}/screen/config", screenDiscovery.toString(), true)
             val screenSaverDiscovery = getBinarySensorDiscoveryDef("Screen Saver", "state", "screenSaver", null, "screenSaver")
             publishMessage("${configuration.mqttDiscoveryTopic}/binary_sensor/${configuration.mqttClientId}/screenSaver/config", screenSaverDiscovery.toString(), true)
-            val sensors = sensorReader.getSensors()
+            val sensors = sensorReader.getSensorDiscoveryInfo()
             for (sensor in sensors) {
-                if (sensor.sensorType != null) {
-                    val sensorDiscoveryDef = getSensorDiscoveryDef(sensor.displayName!!, "sensor/${sensor.sensorType}", sensor.deviceClass, sensor.unit, sensor.sensorType!!)
-                    publishMessage("${configuration.mqttDiscoveryTopic}/sensor/${configuration.mqttClientId}/${sensor.sensorType}/config", sensorDiscoveryDef.toString(), true)
+                if(sensor.binary) {
+                    if(sensor.active) {
+                        val sensorDiscoveryDef = getBinarySensorDiscoveryDef(
+                            sensor.displayName!!,
+                            "sensor/${sensor.sensorType}",
+                            "value",
+                            sensor.deviceClass,
+                            sensor.sensorType!!
+                        )
+                        publishMessage(
+                            "${configuration.mqttDiscoveryTopic}/binary_sensor/${configuration.mqttClientId}/${sensor.sensorType}/config",
+                            sensorDiscoveryDef.toString(),
+                            true
+                        )
+                    }
+                    else {
+                        unpublishDiscovery("binary_sensor", sensor.sensorType)
+                    }
+                }
+                else{
+                    if(sensor.active) {
+                        val sensorDiscoveryDef = getSensorDiscoveryDef(
+                            sensor.displayName!!,
+                            "sensor/${sensor.sensorType}",
+                            sensor.deviceClass,
+                            sensor.unit,
+                            sensor.sensorType!!
+                        )
+                        publishMessage(
+                            "${configuration.mqttDiscoveryTopic}/sensor/${configuration.mqttClientId}/${sensor.sensorType}/config",
+                            sensorDiscoveryDef.toString(),
+                            true
+                        )
+                    }
+                    else{
+                        unpublishDiscovery("sensor", sensor.sensorType)
+                    }
                 }
             }
 
         } else {
             publishMessage("${configuration.mqttDiscoveryTopic}/binary_sensor/${configuration.mqttClientId}/screen/config", "", false)
             publishMessage("${configuration.mqttDiscoveryTopic}/binary_sensor/${configuration.mqttClientId}/screenSaver/config", "", false)
-            val sensors = sensorReader.getSensors()
+            val sensors = sensorReader.getSensorDiscoveryInfo()
             for (sensor in sensors) {
-                if (sensor.sensorType != null) {
-                    unpublishDiscovery("sensor", sensor.sensorType)
-                }
+                unpublishDiscovery("sensor", sensor.sensorType)
             }
         }
 
@@ -1288,8 +1322,16 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
 
     private val sensorCallback = object : SensorCallback {
         override fun publishSensorData(sensorName: String, sensorData: JSONObject) {
-            publishApplicationState()
-            publishCommand(COMMAND_SENSOR + sensorName, sensorData)
+            if(configuration.sensorsEnabled && mqttOptions.isValid) {
+                publishCommand(COMMAND_SENSOR + sensorName, sensorData)
+            }
+            if(configuration.proximityOccupancySensorWakeScreen && sensorName == "occupancy") {
+                if(sensorData["value"] == true)
+                    wakeScreenOn(3600000)
+                else
+                    // Allow the screen to sleep after the normal timeout
+                    wakeScreenOff()
+            }
         }
     }
 

@@ -259,6 +259,21 @@ constructor(private val context: Context, private val sharedPreferences: SharedP
     val batterySensorsEnabled: Boolean
         get() = getBoolPref(R.string.key_setting_battery, R.string.default_setting_sensor_battery_value)
 
+    val lightSensorEnabled: Boolean
+        get() = getBoolPref(R.string.key_settings_sensors_light, R.string.default_setting_sensor_battery_value)
+
+    val proximityDistanceSensorEnabled: Boolean
+        get() = getBoolPref(R.string.key_settings_sensors_proximity_distance_enable, R.string.default_setting_sensor_battery_value)
+
+    val proximityOccupancySensorEnabled: Boolean
+        get() = getBoolPref(R.string.key_settings_sensors_proximity_occupancy_enable, R.string.default_setting_sensor_battery_value)
+
+    val proximityOccupancySensorWakeScreen: Boolean
+        get() = getBoolPref(R.string.key_settings_sensors_proximity_occupancy_wake_screen, R.string.default_setting_sensor_battery_value)
+
+    val proximityOccupancySensorThreshold: Float
+        get() = sharedPreferences.getInt(context.getString(R.string.key_settings_sensors_proximity_occupancy_threshold), 12).toFloat()
+
     val hardwareAccelerated: Boolean
         get() = getBoolPref(R.string.key_hadware_accelerated_enabled,
                 R.string.default_hardware_accelerated_value)
@@ -395,6 +410,10 @@ constructor(private val context: Context, private val sharedPreferences: SharedP
                 context.getString(resId),
                 java.lang.Boolean.valueOf(context.getString(defId))
         )
+    }
+
+    private fun getIntPref(resId: Int, default: Int): Int {
+        return sharedPreferences.getInt(context.getString(resId), default)
     }
 
     fun hasSettingsUpdates(): Boolean {

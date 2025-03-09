@@ -24,10 +24,10 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.hardware.SensorManager.SENSOR_DELAY_NORMAL
 import android.os.BatteryManager
 import android.os.Handler
 import android.os.Looper
-import dagger.android.AndroidInjection
 import xyz.wallpanel.app.R
 import org.json.JSONException
 import org.json.JSONObject
@@ -36,27 +36,29 @@ import xyz.wallpanel.app.persistence.Configuration
 import java.util.*
 import javax.inject.Inject
 
-data class SensorInfo(val sensorType: String?, val unit: String?, val deviceClass: String?, val displayName: String?)
+data class SensorInfo(val sensorType: String, val unit: String?, val deviceClass: String?, val displayName: String?, val binary: Boolean, val active: Boolean )
 
 class SensorReader @Inject
 constructor(private val context: Context){
 
-    private val mSensorManager: SensorManager?
-    private val mSensorList = ArrayList<Sensor>()
-    private val batteryHandler = Handler(Looper.getMainLooper())
+    private val mSensorManager: SensorManager
+    private val activeSensors = ArrayList<Sensor>()
+    private val sensorDiscoveryInfo = ArrayList<SensorInfo>()
+    private val handler = Handler(Looper.getMainLooper())
     private var updateFrequencyMilliSeconds: Int = 0
     private var callback: SensorCallback? = null
-    private var sensorsPublished: Boolean = false
-    private var lightSensorEvent: SensorEvent? = null
+    private var proximityDistance: Boolean = false
+    private var proximityOccupancy: Boolean = false
+    private var lastOccupancyMode: Boolean = false
+    private var occupancyThreshold: Float = 15.0f
+    private var lastDistance: Float = 100.0f
 
     private val batteryHandlerRunnable = object : Runnable {
         override fun run() {
             if (updateFrequencyMilliSeconds > 0) {
                 Timber.d("Updating Battery")
                 getBatteryReading()
-                batteryHandler.removeCallbacksAndMessages(null)
-                batteryHandler.postDelayed(this, updateFrequencyMilliSeconds.toLong())
-                sensorsPublished = false
+                handler.postDelayed(this, updateFrequencyMilliSeconds.toLong())
             }
         }
     }
@@ -64,54 +66,81 @@ constructor(private val context: Context){
     init {
         Timber.d("Creating SensorReader")
         mSensorManager = context.getSystemService(SENSOR_SERVICE) as SensorManager
-        for (s in mSensorManager.getSensorList(Sensor.TYPE_ALL)) {
-            if (getSensorName(s.type) != null)
-                mSensorList.add(s)
-        }
-
     }
 
-    fun getSensors(): List<SensorInfo> {
-        return mSensorList.map { s -> SensorInfo(getSensorName(s.type), getSensorUnit(s.type), getSensorDeviceClass(s.type), getSensorDisplayName(s.type)) }
+    fun getSensorDiscoveryInfo(): List<SensorInfo> {
+        return sensorDiscoveryInfo
     }
 
     fun startReadings(freqSeconds: Int, callback: SensorCallback, configuration: Configuration) {
         Timber.d("startReadings")
+
         this.callback = callback
         if (freqSeconds >= 0) {
             if(configuration.batterySensorsEnabled) {
                 updateFrequencyMilliSeconds = 1000 * freqSeconds
-                batteryHandler.removeCallbacksAndMessages(null)
-                batteryHandler.postDelayed(
-                    batteryHandlerRunnable,
-                    updateFrequencyMilliSeconds.toLong()
-                )
+                handler.postDelayed( batteryHandlerRunnable, updateFrequencyMilliSeconds.toLong())
             }
-            startSensorReadings()
         }
+        startSensorReadings(configuration)
     }
 
     fun refreshSensors() {
         if(updateFrequencyMilliSeconds > 0) {
-            batteryHandler.removeCallbacksAndMessages(null)
-            batteryHandler.post(batteryHandlerRunnable)
+            handler.removeCallbacksAndMessages(batteryHandlerRunnable)
+            handler.post(batteryHandlerRunnable)
         }
-        stopSensorReading()
-        startSensorReadings()
     }
 
     fun stopReadings() {
         Timber.d("stopReadings")
         updateFrequencyMilliSeconds = 0
-        batteryHandler.removeCallbacksAndMessages(null)
+        handler.removeCallbacksAndMessages(batteryHandlerRunnable)
         stopSensorReading()
     }
 
-    private fun publishSensorData(sensorName: String?, sensorData: JSONObject) {
+    private fun publishSensorData(event: SensorEvent) {
         Timber.d("publishSensorData")
-        if(sensorName != null) {
-            callback?.publishSensorData(sensorName, sensorData)
+
+        when(event.sensor.type) {
+            Sensor.TYPE_PROXIMITY -> {
+                if(proximityDistance) {
+
+                    val distance = event.values[0];
+                    if(Math.abs(lastDistance - distance) > 2.0) {
+                        lastDistance = distance
+
+                        val data = JSONObject()
+                        data.put(VALUE, distance)
+                        data.put(UNIT, UNIT_CM)
+                        data.put(ID, event.sensor.name)
+                        callback?.publishSensorData("proximity", data)
+                    }
+                }
+                if(proximityOccupancy) {
+                    val distance = event.values[0];
+                    val close = distance < occupancyThreshold
+                    if(close != lastOccupancyMode) {
+                        lastOccupancyMode = close
+                        val data = JSONObject()
+                        data.put(VALUE, close)
+                        data.put(ID, event.sensor.name)
+                        callback?.publishSensorData("occupancy", data)
+                    }
+                }
+            }
+            else -> {
+                val sensorName = getSensorName(event.sensor.type)!!
+                val data = JSONObject()
+                data.put(VALUE, event.values[0])
+                data.put(UNIT, getSensorUnit(event.sensor.type))
+                data.put(ID, event.sensor.name)
+
+                callback?.publishSensorData(sensorName, data)
+            }
+
         }
+
     }
 
     private fun getSensorName(sensorType: Int): String? {
@@ -121,6 +150,7 @@ constructor(private val context: Context){
             Sensor.TYPE_MAGNETIC_FIELD -> return MAGNETIC_FIELD
             Sensor.TYPE_PRESSURE -> return PRESSURE
             Sensor.TYPE_RELATIVE_HUMIDITY -> return HUMIDITY
+            Sensor.TYPE_PROXIMITY -> return PROXIMITY
         }
         return null
     }
@@ -132,6 +162,7 @@ constructor(private val context: Context){
             Sensor.TYPE_MAGNETIC_FIELD -> return context.getString(R.string.mqtt_sensor_magnetic_field)
             Sensor.TYPE_PRESSURE -> return context.getString(R.string.mqtt_sensor_pressure)
             Sensor.TYPE_RELATIVE_HUMIDITY -> return context.getString(R.string.mqtt_sensor_humidity)
+            Sensor.TYPE_PROXIMITY -> return context.getString(R.string.mqtt_sensor_proximity)
         }
         return null
     }
@@ -160,15 +191,49 @@ constructor(private val context: Context){
         return null
     }
 
+
+
     /**
      * Start all sensor readings.
      */
-    private fun startSensorReadings() {
+    private fun startSensorReadings(configuration: Configuration) {
         Timber.d("startSensorReadings")
-        if(mSensorManager != null) {
-            for (sensor in mSensorList) {
-                mSensorManager.registerListener(sensorListener, sensor, 1000)
+
+        occupancyThreshold = configuration.proximityOccupancySensorThreshold
+        proximityDistance = configuration.sensorsEnabled && configuration.proximityDistanceSensorEnabled
+        proximityOccupancy = (configuration.sensorsEnabled || configuration.proximityOccupancySensorWakeScreen) && configuration.proximityOccupancySensorEnabled
+
+        for (s in mSensorManager.getSensorList(Sensor.TYPE_ALL)) {
+            val sensorName = getSensorName(s.type)
+            if (sensorName != null) {
+                var add = false
+                when(s.type) {
+                    Sensor.TYPE_PROXIMITY -> {
+                        if(proximityDistance || proximityOccupancy)
+                            activeSensors.add(s)
+                        sensorDiscoveryInfo.add(SensorInfo("proximity", UNIT_CM, "distance", context.getString(R.string.mqtt_sensor_proximity), false, proximityDistance))
+                        sensorDiscoveryInfo.add(SensorInfo("occupancy", null, "occupancy", context.getString(R.string.mqtt_sensor_occupancy), true, proximityOccupancy))
+                    }
+                    Sensor.TYPE_LIGHT -> {
+                        val enable = configuration.lightSensorEnabled && configuration.sensorsEnabled
+                        if(enable)
+                            activeSensors.add(s)
+                        sensorDiscoveryInfo.add(SensorInfo(sensorName, getSensorUnit(s.type), getSensorDeviceClass(s.type), getSensorDisplayName(s.type), false, enable))
+                    }
+                    else -> {
+                        if(configuration.sensorsEnabled)
+                            activeSensors.add(s)
+                        sensorDiscoveryInfo.add(SensorInfo(sensorName, getSensorUnit(s.type), getSensorDeviceClass(s.type), getSensorDisplayName(s.type),
+                            binary = false,
+                            active = configuration.sensorsEnabled
+                        ))
+                    }
+                }
             }
+        }
+
+        for (sensor in activeSensors) {
+            val ok = mSensorManager.registerListener(sensorListener, sensor, SENSOR_DELAY_NORMAL)
         }
     }
 
@@ -177,30 +242,18 @@ constructor(private val context: Context){
      */
     private fun stopSensorReading() {
         Timber.d("stopSensorReading")
-        for (sensor in mSensorList) {
-            mSensorManager?.unregisterListener(sensorListener, sensor)
+        for (sensor in activeSensors) {
+            mSensorManager.unregisterListener(sensorListener, sensor)
         }
+
+        activeSensors.clear()
+        sensorDiscoveryInfo.clear()
     }
 
     private val sensorListener = object : SensorEventListener {
         override fun onSensorChanged(event: SensorEvent?) {
-            if(event != null && !sensorsPublished) {
-                var data = JSONObject()
-                if(event.sensor.type == Sensor.TYPE_LIGHT) {
-                    lightSensorEvent = event
-                }
-                if(lightSensorEvent != null) {
-                    data.put(VALUE, lightSensorEvent!!.values[0])
-                    data.put(UNIT, getSensorUnit(lightSensorEvent!!.sensor.type))
-                    data.put(ID, lightSensorEvent!!.sensor.name)
-                    publishSensorData(getSensorName(lightSensorEvent!!.sensor.type), data)
-                }
-                data = JSONObject()
-                data.put(VALUE, event.values[0])
-                data.put(UNIT, getSensorUnit(event.sensor.type))
-                data.put(ID, event.sensor.name)
-                publishSensorData(getSensorName(event.sensor.type), data)
-                sensorsPublished = true
+            if(event != null) {
+                publishSensorData(event)
             }
         }
         override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
@@ -228,7 +281,7 @@ constructor(private val context: Context){
             ex.printStackTrace()
         }
 
-        publishSensorData(BATTERY, data)
+        callback?.publishSensorData(BATTERY, data)
     }
 
 
@@ -238,6 +291,7 @@ constructor(private val context: Context){
         const val AC_PLUGGED: String = "acPlugged"
         const val USB_PLUGGED: String = "usbPlugged"
         const val HUMIDITY: String = "humidity"
+        const val PROXIMITY: String = "proximity"
         const val LIGHT: String = "light"
         const val PRESSURE: String = "pressure"
         const val TEMPERATURE: String = "temperature"
@@ -247,6 +301,7 @@ constructor(private val context: Context){
         const val UNIT_HPA: String = "hPa"
         const val UNIT_UT: String = "uT"
         const val UNIT_LX: String = "lx"
+        const val UNIT_CM: String = "cm"
         const val VALUE = "value"
         const val UNIT = "unit"
         const val ID = "id"

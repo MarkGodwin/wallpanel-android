@@ -28,6 +28,7 @@ import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
 import androidx.navigation.Navigation
+import androidx.preference.PreferenceCategory
 import xyz.wallpanel.app.R
 import xyz.wallpanel.app.ui.activities.SettingsActivity
 import dagger.android.support.AndroidSupportInjection
@@ -89,12 +90,19 @@ class SensorsSettingsFragment : BaseSettingsFragment() {
         setSensorPreferenceSummary(findPreference<Preference>(getString(R.string.key_settings_sensors_magneticField)) as Preference, mSensorManager.getSensorList(Sensor.TYPE_MAGNETIC_FIELD));
         setSensorPreferenceSummary(findPreference<Preference>(getString(R.string.key_settings_sensors_pressure)) as Preference, mSensorManager.getSensorList(Sensor.TYPE_PRESSURE));
         setSensorPreferenceSummary(findPreference<Preference>(getString(R.string.key_settings_sensors_humidity)) as Preference, mSensorManager.getSensorList(Sensor.TYPE_RELATIVE_HUMIDITY));
+        setSensorPreferenceSummary(findPreference<Preference>(getString(R.string.key_settings_sensors_proximity)) as Preference, mSensorManager.getSensorList(Sensor.TYPE_PROXIMITY));
+
     }
 
     private fun setSensorPreferenceSummary(preference: Preference, sensorList: List<Sensor>) {
         if (sensorList.isNotEmpty()) { // Could we have multiple sensors of same type?
             preference.summary = sensorList[0].name
-            //preference.isEnabled = true
+            if(preference is PreferenceCategory || preference is SwitchPreference)
+                preference.isEnabled = true
+        }
+        else {
+            if(preference is PreferenceCategory || preference is SwitchPreference)
+                preference.isEnabled = false
         }
     }
 }

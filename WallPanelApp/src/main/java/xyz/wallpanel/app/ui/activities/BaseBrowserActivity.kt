@@ -146,7 +146,6 @@ abstract class BaseBrowserActivity : DaggerAppCompatActivity() {
                     proc2.waitFor()
                     Timber.d("System shutdown")
                 }, 2000)
-
             }
 
         }
